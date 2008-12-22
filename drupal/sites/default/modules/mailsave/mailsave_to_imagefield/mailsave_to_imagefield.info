@@ -1,0 +1,9 @@
+name = Mailsave to CCK Imagefield
+description = Works with mailsave to create CCK imagefield items from attached images
+dependencies = mailsave imagefield
+package = "Mailsave"
+; Information added by drupal.org packaging script on 2008-08-20
+version = "5.x-3.3"
+project = "mailsave"
+datestamp = "1219269627"
+

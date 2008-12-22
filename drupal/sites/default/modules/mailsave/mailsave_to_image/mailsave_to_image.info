@@ -1,0 +1,13 @@
+; $Id: mailsave_to_image.info,v 1.1 2007/04/22 23:49:23 stuartgreenfield Exp $
+
+name = Mailsave to image
+description = Works with mailsave to create image nodes from incoming jpegs
+dependencies = mailsave image
+package = "Mailsave"
+
+
+; Information added by drupal.org packaging script on 2008-08-20
+version = "5.x-3.3"
+project = "mailsave"
+datestamp = "1219269627"
+
