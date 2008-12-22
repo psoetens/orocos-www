@@ -130,8 +130,8 @@ function spamspan_footer($main = 0) {
  */
 function spamspan_callback($matches) {
   // Replace .'s in the address with [dot]
-  $user_name = str_replace(".", " [dot] ", $matches[1]);
-  $domain = str_replace(".", " [dot] ", $matches[2]);
+  $user_name = str_replace(".", " ", $matches[1]);
+  $domain = ""; //str_replace(".", " [dot] ", $matches[2]);
   return '<span class="spamspan"><span class="'. variable_get('spamspan_userclass', 'u') ."\">$user_name</span>". variable_get('spamspan_at', ' [at] ') ."<span class=\"". variable_get('spamspan_domainclass', 'd') ."\">$domain</span></span>";
 }
 
