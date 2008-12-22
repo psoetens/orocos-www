@@ -1,0 +1,8 @@
+; $Id: pearwiki_filter.info,v 1.1 2007/01/05 01:03:35 roetzi Exp $
+name = "Wiki filter"
+description = "Filter which implements Wiki filter in Drupal"
+
+; Information added by drupal.org packaging script on 2007-03-03
+version = "5.x-1.0"
+project = "wiki"
+
