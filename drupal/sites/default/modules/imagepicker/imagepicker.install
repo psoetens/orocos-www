@@ -1,0 +1,72 @@
+<?php
+// $Id: imagepicker.install,v 1.2 2008/05/30 21:28:36 hutch Exp $
+// $Name: DRUPAL-5--1-0 $
+
+function imagepicker_install() {
+  // Create a directory structure so that usernames would be divided by letters.
+  $drupalDir = str_replace('/', DIRECTORY_SEPARATOR, getcwd()).DIRECTORY_SEPARATOR;
+  $dir = $drupalDir.file_directory_path().DIRECTORY_SEPARATOR.'imagepicker';
+
+  if (file_check_directory($dir, true)) {
+    $dirList = range('a', 'z');
+    array_push($dirList, 'others');
+
+    foreach ($dirList as $v) {
+      $newDir = $dir.DIRECTORY_SEPARATOR.$v;
+      if (! file_check_directory($newDir, true)) {
+        drupal_set_message(t('directory creation for the Imagepicker module was unsuccessful.'), 'error');
+      }
+    }
+
+    $created1 = db_query("INSERT INTO {sequences} (name, id) VALUES ('imagepicker_img_id', 0);");
+
+    switch ($GLOBALS['db_type']) {
+      case 'mysql':
+      case 'mysqli':
+        $created2 = db_query("
+          CREATE TABLE {imagepicker} (
+          `img_id` int(11) unsigned NOT NULL,
+          `uid` int(10) unsigned NOT NULL,
+          `img_name` varchar(255) NOT NULL,
+          `img_title` varchar(255) default NULL,
+          `img_description` varchar(255) default NULL,
+          `img_date` timestamp NOT NULL,
+          PRIMARY KEY (`img_id`),
+          KEY `uid` (`uid`)
+          )
+        ");
+        break;
+
+/*
+      case 'pgsql':
+        db_query("
+          CREATE TABLE {imagepicker} (
+          img_id integer UNIQUE,
+          uid integer NOT NULL,
+          img_name varchar(255) NOT NULL,
+          img_title varchar(255) NULL,
+          img_description varchar(255) NULL,
+          img_date timestamp DEFAULT current_timestamp,
+          CONSTRAINT imagepicker_uid INDEX(uid)
+        );
+      ");
+      break;
+*/
+    }
+    if (!$created1 || !$created2) {
+      drupal_set_message(t('Table installation for the Imagepicker module was unsuccessful.'), 'error');
+    }
+    else {
+      drupal_set_message(t('Table installation for the Imagepicker module was successful. Go to Site Configuration to set preferences.'), '');
+    }
+  }
+  else {
+    drupal_set_message(t('directory creation for the Imagepicker module was unsuccessful.'), 'error');
+  }
+}
+
+function imagepicker_uninstall() {
+  db_query('DROP TABLE {imagepicker};');
+  db_query("DELETE FROM {sequences} WHERE name = 'imagepicker_img_id';");
+  db_query("DELETE FROM {variable} WHERE name LIKE 'imagepicker_%';");
+}

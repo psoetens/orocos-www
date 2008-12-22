@@ -1,0 +1,10 @@
+name = Talk
+description = Display comments on a seperate talk page
+dependencies = comment
+version = "5.x-1.x-dev"
+
+; Information added by drupal.org packaging script on 2008-03-24
+version = "5.x-1.2"
+project = "talk"
+datestamp = "1206340514"
+

@@ -1,0 +1,64 @@
+<?php
+// $Id: taxonomy_breadcrumb.install,v 1.4.2.3 2007/03/02 02:11:58 craig Exp $.
+
+/**
+ * @file
+ * .install file for the taxonomy_breadcrumb module.
+ */
+
+
+/**
+ * Implementation of hook_install().
+ */
+function taxonomy_breadcrumb_install() {
+  drupal_set_message('Installing taxonomy_breadcrumb.');
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      db_query("CREATE TABLE {taxonomy_breadcrumb_vocabulary} (
+                vid int(10) unsigned NOT NULL default '0',
+                path varchar(128) NOT NULL default '',
+                PRIMARY KEY (vid)
+                ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+    
+
+      db_query("CREATE TABLE {taxonomy_breadcrumb_term} (
+                tid int(10) unsigned NOT NULL default '0',
+                path varchar(128) NOT NULL default '',
+                PRIMARY KEY (tid)
+                ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      break;
+
+    case 'pgsql':
+      db_query("CREATE TABLE {taxonomy_breadcrumb_vocabulary} (
+                vid integer NOT NULL default '0',
+                path varchar(128) NOT NULL default '',
+                PRIMARY KEY (vid)
+                );");
+
+      db_query("CREATE TABLE {taxonomy_breadcrumb_term} (
+                tid integer NOT NULL default '0',
+                path varchar(128) NOT NULL default '',
+                PRIMARY KEY (tid)
+                );");
+      break;
+  }
+  
+  variable_set('taxonomy_breadcrumb_home', t('Home'));
+  drupal_set_message('Taxonomy breadcrumb: Taxonomy based breadcrumbs should now appear on node pages and taxonomy/term pages.  For the most common applications this module will work "out of the box" and no further configuration is necessary.  If customization is desired settings can be changed on the ' . l('administration page', 'admin/settings/taxonomy-breadcrumb') . '.');
+}
+
+function taxonomy_breadcrumb_uninstall() {
+  drupal_set_message('Uninstalling taxonomy_breadcrumb.');
+  db_query('DROP TABLE {taxonomy_breadcrumb_vocabulary}');
+  db_query('DROP TABLE {taxonomy_breadcrumb_term}');
+}
+
+function taxonomy_breadcrumb_update_1() {
+
+  // Ensure this module's weight is larger than the core taxonomy module.
+  // This allows for this module's menu callback for taxonomy/term to get called
+  // instead of the core taxonomy/term callback.
+  $ret[] = update_sql("UPDATE {system} SET weight = 10 WHERE name = 'taxonomy_breadcrumb'");
+  return $ret;
+}

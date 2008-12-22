@@ -1,0 +1,23 @@
+<?php
+class ListhandlerTest extends DrupalTestCase {
+
+  function get_info() {
+    return array(
+      'name' => t('Listhandler'),
+      'desc' => t('Executes test suite for Listhandler module'),
+      'group' => t('Listhandler module'),
+    );
+  }
+
+  function testAddAnEmailToAForum() {
+  }
+
+  function testSendAPostAsAnEmail() {
+  }
+
+  /**
+   * Ensures that changes made on the admin page stick
+   */
+  function testSetUnsetSettings() {
+  }
+}

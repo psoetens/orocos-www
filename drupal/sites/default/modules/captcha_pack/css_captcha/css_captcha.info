@@ -1,0 +1,11 @@
+; $Id: css_captcha.info,v 1.4 2007/09/15 08:59:23 soxofaan Exp $
+name = "CSS CAPTCHA"
+description = "Provides a CSS based CAPTCHA type."
+package = "Spam control"
+dependencies = captcha
+
+; Information added by drupal.org packaging script on 2007-12-22
+version = "5.x-1.1"
+project = "captcha_pack"
+datestamp = "1198328103"
+

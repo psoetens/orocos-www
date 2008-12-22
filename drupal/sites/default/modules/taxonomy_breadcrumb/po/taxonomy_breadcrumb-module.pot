@@ -1,0 +1,111 @@
+# $Id: taxonomy_breadcrumb-module.pot,v 1.2.2.2 2007/03/16 21:00:03 craig Exp $
+#
+# LANGUAGE translation of Drupal (taxonomy_breadcrumb.module)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# Generated from file: taxonomy_breadcrumb.module,v 1.5.2.1 2007/01/20 05:14:42 craig
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: taxonomy_breadcrumb\n"
+"POT-Creation-Date: 2007-01-22 15:51+0100\n"
+"PO-Revision-Date: 2007-01-23 11:34+0100\n"
+"Last-Translator: piero <piero@localhost>\n"
+"Language-Team: tropic <piero@tropic.it>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Poedit-Language: English\n"
+"X-Poedit-Country: ITALY\n"
+"X-Poedit-SourceCharset: utf-8\n"
+
+#: taxonomy_breadcrumb.module:151
+msgid "Taxonomy Breadcrumb"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:152
+msgid "Configure how taxonomy based breadcrumbs are displayed."
+msgstr ""
+
+#: taxonomy_breadcrumb.module:166
+msgid "Basic Settings"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:172
+msgid "Home breadcrumb text"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:174
+msgid "Text to display at top of breadcrumb trail.  Typically home or your site name.  Leave blank to have no home breadcrumb."
+msgstr ""
+
+#: taxonomy_breadcrumb.module:179
+msgid "Show current term in breadcrumb trail?"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:181
+msgid "When enabled, the lightest term associated with node is shown as the last breadcrumb in the breadcrumb trail.  When disabled, the only terms shown in the breadcrumb trail are parent terms (if any parents exist).  The recommended setting is enabled."
+msgstr ""
+
+#: taxonomy_breadcrumb.module:187
+msgid "Advanced Settings"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:194
+msgid "Include or exclude the following node types"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:196
+msgid "Include"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:196
+msgid "Exclude"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:209
+msgid "Node types to include or exclude"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:211
+msgid "Enter a list of node types to include or exclude applying taxonomy based breadcrumbs to.  Separate multiple values with spaces. <p>Node types currently enabled"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:236
+msgid "<p>See %link.</p>"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:239
+msgid ""
+"<p>The taxonomy_breadcrumb module generates taxonomy based breadcrumbs on node pages, where the breadcrumbs link to the normal taxonomy/term pages or to administrator defined pages.  Breadcrumbs take the following form:</p>\n"
+"                  <p>[HOME] >> [VOCABULARY] >> TERM >> [TERM] ...</p>\n"
+"                  <p><ul>\n"
+"                  <li>The text displayed for HOME is configurable below.  The HOME breadcrumb (if present) will link to the homepage.  If the HOME breadcrumb text is not defined (blank), it will not appear in the breadcrumb trail.</li>\n"
+"                  <li>The VOCABULARY breadcrumb (if present) will link to an administrator defined page (node).  If the VOCABULARY does not have an administrator defined page, it will not appear in the breadcrumb trail. This can be configured on the add/edit vocabulary pages within !tax_link (taxonomy).</li>\n"
+"                  <li>Each TERM breadcrumb will link to either (1) taxonomy/term/tid by default, or (2) an administrator defined page (node) if one is defined for the term.  This can be configured on the add/edit term pages within !tax_link (taxonomy).</li>\n"
+"                  </ul></p>\n"
+"                  Examples:\n"
+"                  <ul>\n"
+"                  <li>home >> term >> term</li>\n"
+"                  <li>mysite >> term >> term</li>\n"
+"                  <li>home >> vocabulary >> term >> term</li>\n"
+"                  <li>vocabulary >> term >> term</li>\n"
+"                  </ul>"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:270;280
+msgid "Breadcrumb path (taxonomy_breadcrumb)"
+msgstr ""
+
+#: taxonomy_breadcrumb.module:273
+msgid "Specify the path this vocabulary links to as a breadcrumb.  If blank, the breadcrumb will not appear.  Use a relative path and don't add a trailing slash.  For example: node/42 or my/path/alias."
+msgstr ""
+
+#: taxonomy_breadcrumb.module:283
+msgid "Specify the path this term links to as a breadcrumb.  If blank, the breadcrumb links to the default taxonomy page.  Use a relative path and don't add a trailing slash.  For example: node/42 or my/path/alias."
+msgstr ""
+
+#: taxonomy_breadcrumb.module:0
+msgid "taxonomy_breadcrumb"
+msgstr ""
+

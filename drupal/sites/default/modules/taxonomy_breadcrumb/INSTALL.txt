@@ -1,0 +1,21 @@
+// $Id: INSTALL.txt,v 1.1.4.1 2007/01/20 05:14:42 craig Exp $.
+
+Installing Taxonomy breadcrumb for Drupal 5.0
+
+The taxonomy_breadcrumb module installation instructions are "typical" for 
+Drupal modules.  See http://drupal.org/node/70151
+
+1.  Create a folder taxonomy_breadcrumb within your contributed modules folder:
+      sites/all/modules/taxonomy_breadcrumb
+
+2.  Uncompress and copy/upload all of the taxonomy_breadcrumb files to this 
+    folder.
+
+3.  Go to the module administration page (admin/build/modules) while logged in
+    as an administrator and enable the module.  The provided .install file will
+    automatically create two database tables when the module is first installed.
+
+4.  Configure the breadcrumb trail on the module's settings page 
+    (admin/settings/taxonomy-breadcrumb).  Configuration instructions are 
+    provided on this page.  This module also adds new fields to the vocabulary 
+    and term add/edit pages (admin/content/taxonomy).

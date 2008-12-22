@@ -1,0 +1,194 @@
+<?php
+// $Id: talk.module,v 1.1.2.1.2.1 2008/03/24 06:30:57 cwgordon7 Exp $
+
+/**
+ * @file
+ * Comments are displayed in a separate 'talk' tab, for node types you wish
+ * Made for Drupal 5.x
+ */
+
+/**
+ * Implementation of hook_help().
+ */
+function talk_help($section) {
+  switch ($section) {
+    case 'admin/help#talk':
+      $output = '<p>'. t('The talk module gives you the option to display comments on a seperate tab. The option is per content type and can be set in the workflow options of a content type.') .'</p>';
+      return $output;
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function talk_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array(
+      'path' => 'admin/settings/talk',
+      'title' => 'Talk page',
+      'description' => 'Configure settings for the talk page.',
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('talk_admin_form'),
+    );
+  }
+  else {
+    if (arg(0) == 'node' && is_numeric(arg(1))) {
+      $node = node_load(arg(1));
+      if (talk_activated($node->type) && $node->nid && _talk_node_comment_value($node)) {
+        $items[] = array(
+          'path' => 'node/'. arg(1) .'/talk',
+          'title' => talk_title(),
+          'callback' => 'talk_handle',
+          'callback arguments' => array(arg(1)),
+          'access' => user_access('access comments'),
+          'type' => MENU_LOCAL_TASK,
+          'weight' => 1,
+        );
+      }
+    }
+  }
+  return $items;
+}
+
+/**
+ * Helper item for talk_menu: access callback.
+ */
+function _talk_access($perm, $node) {
+  return (user_access($perm) && talk_activated($node->type) && $node->nid && _talk_node_comment_value($node));
+}
+
+/**
+ * Menu call back for admin form.
+ */
+function talk_admin_form() {
+  $form = array();
+  $form['talk_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Title of the "talk" page'),
+    '#default_value' => talk_title(),
+  );
+  return system_settings_form($form);
+}
+
+function talk_title($title = NULL) {
+  if (is_null($title)) {
+    return variable_get('talk_title', t('Talk'));
+  }
+  variable_set('talk_title', $title);
+}
+
+/**
+ * Menu callback for talk page.
+ */
+function talk_handle($nid) {
+  $node = node_load($nid);
+  drupal_set_title($node->title);
+  $add_comments = _talk_node_comment_value($node) == COMMENT_NODE_READ_WRITE && user_access('post comments');
+  return theme('talkpage', $node, $add_comments);
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function talk_nodeapi(&$node, $op) {
+  switch ($op) {
+    case 'load':
+      if (talk_activated($node->type) && arg(0) == 'node' && !arg(2)) {
+        // Overwrite setting of comment module and set comments for this node to disabled.
+        // This prevents the comments of being displayed.
+        $output['comment_original_value'] = $node->comment;
+        $output['comment'] = 0;
+        return $output;
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_link().
+ */
+function talk_link($type, $node = NULL, $teaser = FALSE) {
+  if ($type == 'node' && talk_activated($node->type) && user_access('access comments')) {
+    $result = array();
+    if ($node->comment_count) {
+      $result['talk_view'] = array(
+        'title' => t('@title page (@nr comments)', array('@nr' => $node->comment_count, '@title' => talk_title())),
+        'href' => 'node/'. $node->nid .'/talk',
+      );
+    }
+    elseif (_talk_node_comment_value($node) == COMMENT_NODE_READ_WRITE) {
+      $result['comment_add'] = array(
+        'title' => t('Add new comment'),
+        'href' => "comment/reply/$node->nid",
+      );
+    }
+    return $result;
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function talk_form_alter($form_id, &$form) {
+  // Add option to comment options of node types.
+  if ($form_id == 'node_type_form' && isset($form['identity']['type']) && module_exists('comment')) {
+    $form['workflow']['comment_talk'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Display comments on separate talk page'),
+      '#prefix' => '<strong>'. t('Talk pages:') .'</strong>',
+      '#weight' => 5,
+      '#default_value' => talk_activated($form['#node_type']->type),
+    );
+  }
+}
+
+/**
+ * Implementation of hook_comment()
+ * Changing the destination to the talk page after posting a comment
+ */
+function talk_comment($a1, $op) {
+  if ($op == 'insert' || $op == 'update') {
+    $nid = $a1['nid'];
+    $node = node_load($nid);
+    if (talk_activated($node->type)) {
+      $_REQUEST['destination'] = 'node/'. $a1['nid'] .'/talk';
+    }
+  }
+} 
+/**
+ * Is talk page option activated for node tpye?
+ */
+function talk_activated($node_type, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('comment_talk_'. $node_type, FALSE);
+  }
+  variable_set('comment_talk_'. $node_type, $value);
+}
+
+/**
+ * Value of 'comment' of node.
+ */
+function _talk_node_comment_value(&$node) {
+  return isset($node->comment_original_value) ? $node->comment_original_value : $node->comment;
+}
+
+/*
+ * Theme functions
+ */
+
+/**
+ * Theme talkpage for node
+ * @param $node
+ *   node whose talk page is displayed
+ * @param $add_comments
+ *   boolean which indicates if the adding of comments is allowed for current user
+ */
+function theme_talkpage($node, $add_comments) {
+  $output = '';
+  $output .= comment_render($node);
+  if ($node->comment_count && $add_comments) {
+    $output .= '<p>' . l(t('Add new comment'), "comment/reply/$node->nid") . '</p>';
+  }
+  return $output;
+}

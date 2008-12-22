@@ -1,0 +1,26 @@
+// $Id: CHANGELOG.txt,v 1.1.2.3 2008/06/07 14:17:02 hutch Exp $
+
+Image Picker 5.x-1.x-dev, 2008-06-06
+------------------------------------
+by hutch, #266621 fixed bug in support for comments
+
+Image Picker 5.x-1.x-dev, 2008-06-04
+------------------------------------
+by hutch, #266621 added support for comments
+
+Image Picker 5.x-1.x-dev, 2008-05-31
+------------------------------------
+by hutch, brought module up to drupal coding standards
+
+Image Picker 5.x-1.x-dev, 2008-05-30
+------------------------------------
+By hutch, numerous changes by new maintainer
+fixed module path finding
+removed .htaccess file creation on install, not required
+fixed permissions
+added admin settings
+lots of cleanup and code comments
+
+Image Picker 5.x-1.x-dev, 2007-12-15
+------------------------------------
+Initial release of imagepicker module to HEAD

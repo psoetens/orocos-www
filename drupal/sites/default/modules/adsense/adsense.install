@@ -1,0 +1,58 @@
+<?php
+// $Id: adsense.install,v 1.8 2008/02/10 01:24:19 kbahey Exp $
+//
+// Copyright 2005-2008 Khalid Baheyeldin http://2bits.com
+
+function adsense_install() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      $success = db_query("CREATE TABLE IF NOT EXISTS {adsense_clicks} (
+        aid       INT(10)     NOT NULL AUTO_INCREMENT,
+        ip        VARCHAR(15) DEFAULT '0',
+        timestamp INT(11)     unsigned NOT NULL DEFAULT '0',
+        path      VARCHAR(255) NOT NULL DEFAULT '',
+        PRIMARY KEY  (aid),
+        KEY (timestamp)
+        ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      break;
+    case 'pgsql':
+      $success = db_query("CREATE TABLE {adsense_clicks} (
+        aid       SERIAL,
+        ip        VARCHAR(15) DEFAULT '0',
+        timestamp INTEGER NOT NULL DEFAULT '0',
+        path      VARCHAR(255) DEFAULT '',
+        PRIMARY KEY  (aid));");
+      $success = db_query("CREATE INDEX {timestamp} ON {adsense_clicks} (timestamp);");
+      break;
+  }
+
+  if ($success) {
+    drupal_set_message(t('Adsense module table creation successful.'));
+  }
+  else {
+    drupal_set_message(t('Adsense module table creation was unsuccessful.'), 'error');
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function adsense_uninstall() {
+  db_query('DROP TABLE {adsense_clicks}');
+  db_query("DELETE FROM {variable} WHERE name LIKE 'adsense_%'");
+}
+
+function adsense_update_1() {
+  adsense_install();
+}
+
+function adsense_update_2() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      db_query("ALTER TABLE {adsense_clicks} ADD `path` varchar(255) default ''");
+      break;
+  }
+}
+

@@ -1,0 +1,9 @@
+; $Id: advuser.info,v 1.2.2.1 2008/01/10 14:17:49 sign Exp $
+name = Advanced User Management
+description = Advanced user management module. Filter users and mass actions based on their filters.
+
+; Information added by drupal.org packaging script on 2008-06-27
+version = "5.x-2.0"
+project = "advuser"
+datestamp = "1214584501"
+

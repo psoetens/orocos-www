@@ -1,0 +1,733 @@
+<?php
+// $Id: pearwiki_filter.module,v 1.3.2.2 2007/03/03 03:27:22 roetzi Exp $
+
+/**
+ * @file
+ * An input filter which uses the PEAR Text_Wiki package for rendering
+ * different wiki syntax styles.
+ */
+
+/**
+ * Implementation of hook_help().
+ */
+function pearwiki_filter_help($section ='') {
+  $output = '';
+
+  switch($section) {
+    case 'admin/help#pearwiki_filter':
+      $output = t('Filter for Wiki style syntax. You need to install the PEAR Text_Wiki package to use this filter. See the readme.txt for instructions on how to install the needed packages.');
+      break;
+  }
+
+  return $output;
+}
+
+/*
+ * Setup functions
+ */
+
+/**
+ * Implementation of hook_filter().
+ */
+function pearwiki_filter_filter($op, $delta = 0, $format = -1, $text = '') {
+  switch ($op) {
+    case 'list':
+      return array(t('PEAR Wiki Filter'));
+
+    case 'description':
+      return t('Filter which uses PEAR Wiki parsers.');
+
+    case 'process':
+      return pearwiki_filter_process($text, $format);
+
+    case 'settings':
+      return pearwiki_filter_filter_settings($format);
+
+    case 'no cache':
+      return false;
+
+    default:
+      return $text;
+  }
+}
+
+/**
+ * Implementation of hook_filter_tips().
+ */
+function pearwiki_filter_filter_tips($delta, $format, $long = false) {
+  $output = '';
+
+  $formatname = pearwiki_filter_syntax($format);
+  $helpfunction = 'pearwiki_filter_'.strtolower($formatname).'_help';
+  // Try the syntax specific helper function first.
+  if (function_exists($helpfunction)) {
+    $output = $helpfunction('tips', $long, $format);
+    $url = $helpfunction('syntax_url');
+  }
+  if ($output) {
+    // Output was produced by format specific function.
+  } elseif ($url) {
+    // No output was produced, but an url to the wiki syntax was provided.
+    $output = '<p>' . t('You can use <a href="!url">%wiki syntax</a>. It is possible that not all formatting options are supported at the moment.', array('!url'=>$url, '%wiki' => $formatname)) . '</p>';
+  } else {
+    // Default help text.
+    $output = '<p>' . t('You can use %wiki syntax.It is possible that not all formatting options are supported at the moment.', array('%wiki' => $formatname)) . '</p>';
+    $output .= pearwiki_filter_interwiki_help_tip($format, $long);
+  }
+  return $output;
+}
+
+/**
+ * Callback for settings formular
+ */
+function pearwiki_filter_filter_settings($format) {
+  $form = array();
+  $form['pearwiki_filter'] = array(
+    '#type' => 'fieldset', 
+    '#title' => t('PEAR Wiki filter'), 
+    '#collapsible' => TRUE,
+  );
+  $form['pearwiki_filter']['pearwiki_filter_pear_path_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Path of PEAR packages'),
+    '#default_value' => pearwiki_filter_pear_path($format),
+    '#description' => t('Specify the base path of the Text_Wiki PEAR package. The specified directory should contain the following subdirectory structure: Text/Wiki.<br/>After changing the directory you need to save the configuration to see the formats in the list.')
+  );
+  $parsers = array();
+  foreach (pearwiki_filter_parsers($format) as $parser) {
+    $url = '';
+    $name = '';
+    $helpfunction = 'pearwiki_filter_'.strtolower($parser).'_help';
+    if (function_exists($helpfunction)) {
+      $url = $helpfunction('syntax_url');
+      $name = $helpfunction('name');
+    }
+    if (!$name)
+      $name = $parser;
+    if ($url) {
+      $parsers[$parser] = '<a href="'.$url.'">'.$name.'</a>';
+    } else {
+      $parsers[$parser] = $name;
+    }
+  }
+  if (count($parsers)) {
+    $form['pearwiki_filter']['pearwiki_filter_syntax_'.$format] = array(
+      '#type' => 'radios',
+      '#title' => t('Format'),
+      '#default_value' => pearwiki_filter_syntax($format),
+      '#options' => $parsers,
+      '#description' => t('Select the Wikiformat to use. Click on a name to view an overview of the syntax.'),
+    );
+  } else {
+    $form['pearwiki_filter']['pearwiki_filter_syntax_'.$format] = array(
+      '#value' => '<p class="error">' .
+        t('PEAR Text/Wiki installation not found. Looked in directory %dir.<br/>' .
+          'There should be a <em>Text</em> directory with a file <em>Wiki.php</em> in it.', 
+          array('%dir'=>pearwiki_filter_pear_path($format))) . '</p>',
+    );
+  }
+  // Compatibility options
+  // ---------------------
+  $form['pearwiki_filter']['compatibility'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Compatibility',
+    '#description' => t('The following options control ... .')
+  );
+/*  $form['pearwiki_filter']['compatibility']['pearwiki_filter_allow_html_'.$format] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow basic HTML?'),
+    '#default_value' => pearwiki_filter_allow_html($format),
+    '#description' => t('Allow basic HTML tags to be used.'),
+  );*/
+  $form['pearwiki_filter']['compatibility']['pearwiki_filter_ignore_tags_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Ignore tags'),
+    '#default_value' => pearwiki_filter_ignore_tags($format),
+    '#description' => t('Tags which are fully ignored (the tag, attributes and content is untouched). Use this for compatibility with other filters. Specify a space-separated list of tagnames.<br/>Example: If you specify <em>code</em> than the filter ignores &lt;code type="php"&gt; ... &lt;/code&gt; which can then be processed by other filters like the <a href="http://drupal.tschannen.net/wiki/geshi_filter">GeSHi filter</a>. This can introduce a security risk through XSS scripting. Make sure the ignored text will be processed by another filter.')
+  );
+  $form['pearwiki_filter']['compatibility']['pearwiki_filter_ignore_regexp_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Ignore regexp'),
+    '#default_value' => pearwiki_filter_ignore_regexp($format),
+    '#description' => t('A regular expression where the match is ignored (the full match is untouched). Use this for compatibility with other filters. This can introduce a security risk through XSS scripting. Make sure the ignored text will be processed by another filter.')
+  );
+  // Wikilink options
+  // ----------------
+  $form['pearwiki_filter']['wikilinks'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Wikilinks',
+    '#description' => t('The following options control the behavior when wikilinks are used. It is recommended to use one of the additional modules, but only check one. The modules need to be enabled in order to check them.')
+  );
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_wiki_links_'.$format] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use wiki links?'),
+    '#default_value' => pearwiki_filter_use_wiki_links($format),
+    '#description' => t('Are wiki links activated? If this option is not activated, wikilinks will not be parsed.')
+  );
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_space_replacement_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Replacement for Spaces'),
+    '#default_value' => pearwiki_filter_space_replacement($format),
+    '#description' => t('Set the replacement character for spaces in wikilinks. If left emtpy, no replacement will be made. Set the value to the same as in the autopath module, so a title of a node becomes a wikilink. This option is ignored for the <em>Mediawiki</em> format since the parser alredy replaces spaces with underscores.')
+  );
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_wikilink_base_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Base path for wikilinks'),
+    '#default_value' => pearwiki_filter_wikilink_base($format),
+    '#description' => t('If none of the next three options is used, this path will be prepended to wikilinks.')
+  );
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_wikitools_'.$format] = array(
+    '#type' => 'checkbox',
+    '#title' => l(t('Use wikitools?'), 'http://drupal.org/project/wikitools'),
+    '#default_value' => pearwiki_filter_use_wikitools($format),
+    '#description' => t('Use wikitools to create links. When enabled, all links are passed to the wikitools module for handling and have the wikipath prepended which is specified in the wikitools settings. The module wikitools has to be enabled.'),
+  );
+  if (!module_exists('wikitools')) {
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_wikitools_'.$format]['#default_value'] = false;
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_wikitools_'.$format]['#attributes'] = array('disabled' => 'disabled');
+  }
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_liquid_'.$format] = array(
+    '#type' => 'checkbox',
+    '#title' => l(t('Use liquid?'), 'http://drupal.org/project/liquid'),
+    '#default_value' => pearwiki_filter_use_wikitools($format),
+    '#description' => t('Use liquid to create links. When enabled, all wikilinks are of the form \'wiki/Page Title\'. The module liquid has to be enabled.'),
+  );
+  if (!module_exists('liquid')) {
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_liquid_'.$format]['#default_value'] = false;
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_liquid_'.$format]['#attributes'] = array('disabled' => 'disabled');
+  }
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_freelinking_'.$format] = array(
+    '#type' => 'checkbox',
+    '#title' => l(t('Use freelinking?'), 'http://drupal.org/project/freelinking'),
+    '#default_value' => pearwiki_filter_use_freelinking($format),
+    '#description' => t('Use freelinking to create links. When enabled, all links are passed to the freelinking module for handling, thus they have the form \'freelinking/Page Title\'. The module freelinking has to be enabled, but you don\'t have to activate the freelinking filter for this format.'),
+  );
+  if (!module_exists('freelinking')) {
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_freelinking_'.$format]['#default_value'] = false;
+    $form['pearwiki_filter']['wikilinks']['pearwiki_filter_use_freelinking_'.$format]['#attributes'] = array('disabled' => 'disabled');
+  }
+  $form['pearwiki_filter']['wikilinks']['pearwiki_filter_interwiki_mapping_'.$format] = array(
+    '#type' => 'textarea',
+    '#title' => t('Interwiki Mapping'),
+    '#default_value' => pearwiki_filter_interwiki_mapping_text($format),
+    '#description' => t('A list of interwiki mappings Each line denotes one mapping. The format is: <em>title</em> | <em>interwiki name</em> | <em>mapping url</em>. <br />&lt;path&gt; is a special mapping url which will be transformed into a Drupal path for the current site.')
+  );
+  // Image options
+  // -------------
+  $form['pearwiki_filter']['images'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Images',
+    '#description' => t('The following options control the behavior when image links are used.')
+  );
+  $form['pearwiki_filter']['images']['pearwiki_filter_image_base_'.$format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Base path for images'),
+    '#default_value' => pearwiki_filter_image_base($format),
+    '#description' => t('Base path for images. Images will be looked for in this directory.')
+  );
+  if (module_exists('image')) {
+    $form['pearwiki_filter']['images']['pearwiki_filter_use_image_'.$format] = array(
+      '#type' => 'checkbox',
+      '#title' => l(t('Use image module?'), 'http://drupal.org/project/image'),
+      '#default_value' => pearwiki_filter_use_image($format),
+      '#description' => t('Use image module to link images. When enabled, the title of the image name will be searched for in the uploaded image nodes. The module image has to be enabled.'),
+    );
+  } else {
+    $form['pearwiki_filter']['images']['pearwiki_filter_use_image_'.$format] = array(
+      '#type' => 'checkbox',
+      '#title' => l(t('Use wikitools?'), 'http://drupal.org/project/image'),
+      '#default_value' => false,
+      '#description' => t('Use image module to link images. When enabled, the title of the image name will be searched for in the uploaded image nodes. The module image has to be enabled.'),
+      '#attributes' => array('disabled' => 'disabled')
+    );
+  }
+  return $form;
+}
+
+/*
+ * Settings
+ */
+
+/**
+ * Wiki syntax to use for $format.
+ */
+function pearwiki_filter_syntax($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_syntax_'.$format, 'Mediawiki');
+  }
+  variable_set('pearwiki_filter_syntax_'.$format, $value);
+}
+
+/**
+ * Location of override directory for $format
+ */
+function pearwiki_filter_pear_override_directory($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_override_path_'.$format, getcwd().'/'.drupal_get_path('module', 'pearwiki_filter').'/pear_override');
+  }
+  variable_set('pearwiki_filter_override_path_'.$format, $value);
+}
+
+/**
+ * Location of PEAR packages for $format.
+ */
+function pearwiki_filter_pear_path($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_pear_path_'.$format, getcwd().'/'.drupal_get_path('module', 'pearwiki_filter').'/');
+  }
+  variable_set('pearwiki_filter_pear_path_'.$format, $value);
+}
+
+/**
+ * Is basic HTML allowed?
+ */
+function pearwiki_filter_allow_html($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_allow_html_'.$format, true);
+  }
+  variable_set('pearwiki_filter_allow_html_'.$format, $value);
+}
+
+/**
+ * Space-separated list of tag names which are ignored while rendering.
+ */
+function pearwiki_filter_ignore_tags($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_ignore_tags_'.$format, '');
+  }
+  variable_set('pearwiki_filter_ignore_tags_'.$format, $value);
+}
+
+/**
+ * Regular expression whose match is ignored while rendering.
+ */
+function pearwiki_filter_ignore_regexp($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_ignore_regexp_'.$format, '');
+  }
+  variable_set('pearwiki_filter_ignore_regexp_'.$format, $value);
+}
+
+/**
+ * Are wikilinks transformed into links?
+ */
+function pearwiki_filter_use_wiki_links($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_use_wiki_links_'.$format, true);
+  }
+  variable_set('pearwiki_filter_use_wiki_links_'.$format, $value);
+}
+
+/**
+ * Base path for wikilinks.
+ */
+function pearwiki_filter_wikilink_base($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_wikilink_base_'.$format, 'wiki/');
+  }
+  variable_set('pearwiki_filter_wikilink_base_'.$format, $value);
+}
+
+/**
+ * Is freelinking used for wikilinks?
+ */
+function pearwiki_filter_use_freelinking($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_use_freelinking_'.$format, false);
+  }
+  variable_set('pearwiki_filter_use_freelinking_'.$format, $value);
+}
+
+/**
+ * Is wikitools used for wikilinks?
+ */
+function pearwiki_filter_use_wikitools($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_use_wikitools_'.$format, false);
+  }
+  variable_set('pearwiki_filter_use_wikitools_'.$format, $value);
+}
+
+/**
+ * Is liquid used for wikilinks?
+ */
+function pearwiki_filter_use_liquid($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_use_liquid_'.$format, false);
+  }
+  variable_set('pearwiki_filter_use_liquid_'.$format, $value);
+}
+
+
+/**
+ * Unprocessed text for interwiki mappings.
+ */
+function pearwiki_filter_interwiki_mapping_text($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_interwiki_mapping_'.$format, t('Local drupal path'). " | path | <path>\ngroups.drupal.org | gdo | http://groups.drupal.org/freelinking/%s\nWikipedia | wp | http://en.wikipedia.org/wiki/%s\n");
+  }
+  variable_set('pearwiki_filter_interwiki_mapping_'.$format, $value);
+}
+
+/**
+ * Information about interwiki mappings.
+ * @param $op
+ *   when 'url' is passed, returns an array with interwiki ids as key and url mapping as values
+ *   when 'array' is passed, returns an array with interwiki ids as key and an associative array with 'id', 'title' and 'url' as values.
+ */
+function pearwiki_filter_interwiki_mappings($format, $op = 'url') {
+  $mappings = array();
+  $lines = explode("\n", pearwiki_filter_interwiki_mapping_text($format));
+  foreach($lines as $line) {
+    if ($line) {
+      list($title, $id, $url) = explode('|', $line, 3);
+      if (trim($url) == '<path>') {
+        $url = str_replace('__QUERY_POSITION__', '%s', url('__QUERY_POSITION__'));
+      }
+      if ($op == 'url') {
+        $mappings[trim($id)] = trim($url);
+      }
+      elseif ($op == 'array') {
+        $mappings[trim($id)] = array(
+          'id' => trim($id),
+          'title' => trim($title),
+          'url' => trim($url)
+        );
+      }
+    }
+  }
+  return $mappings;
+}
+
+/**
+ * Replacement for spaces in wiki links.
+ * Mediawiki ignores this option and always replaces with an underscore
+ */
+function pearwiki_filter_space_replacement($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_space_replacement_'.$format, variable_get('pathauto_separator', ''));
+  }
+  variable_set('pearwiki_filter_space_replacement_'.$format, $value);
+}
+
+/**
+ * Base path for image lookup.
+ */
+function pearwiki_filter_image_base($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_image_base_'.$format, 'files/');
+  }
+  variable_set('pearwiki_filter_image_base_'.$format, $value);
+}
+
+/**
+ * Base path for image lookup.
+ */
+function pearwiki_filter_use_image($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_use_image_'.$format, true);
+  }
+  variable_set('pearwiki_filter_use_image_'.$format, $value);
+}
+
+/**
+ * List of available parsers.
+ */
+function pearwiki_filter_parsers($format) {
+  $result = array();
+  $dirname = realpath(pearwiki_filter_pear_path($format)).'/Text/Wiki';
+  if (is_dir($dirname)) {
+    $handle = opendir($dirname);
+    while ($file = readdir($handle)) {
+      if ($file != 'Render.php' && $file != 'Parse.php' && is_file($dirname.'/'.$file)) {
+        $result[basename($file, '.php')] = basename($file, '.php'); 
+      }
+    }
+    closedir($handle);
+  }
+  return $result;
+}
+
+/*
+ * Operations
+ */
+
+/**
+ * Parse 'text' and apply the wiki-formatting.
+ */
+function pearwiki_filter_process ($text, $format) {
+  global $pearwiki_current_format;
+
+  // Global option for custom implementation of Text_Wiki rules which
+  // need the options of the current format.
+  $pearwiki_current_format = $format;
+
+  // load PEAR files if necessary
+  ini_set('include_path', ini_get('include_path') . PATH_SEPARATOR . realpath(pearwiki_filter_pear_path($format)));
+  if (!class_exists('Text_Wiki')) {
+    @include_once 'Text/Wiki.php';
+  }
+  if (!class_exists('Text_Wiki')) {
+    // loading of PEAR failed
+    drupal_set_message(t('Loading of <em>Text_Wiki</em> class from PEAR failed. Check your <a href="@url">filter settings</a>.', array('@url' => url('admin/settings/filters/'.$format.'/configure'))), 'error');
+    return '<pre>'.check_plain($text).'</pre>';
+  }
+
+  $formatname = pearwiki_filter_syntax($format);
+  $wiki =& Text_Wiki::singleton($formatname);
+
+  // add path used to insert or overwrite parse/render rules
+  $wiki->addPath('parse',  realpath(pearwiki_filter_pear_override_directory($format)).'/parse');
+  $wiki->addPath('render', realpath(pearwiki_filter_pear_override_directory($format)).'/render');
+
+  // general parse setup
+  if (pearwiki_filter_ignore_regexp($format)) {
+    $wiki->insertRule('ignoreregexp', 'delimiter');
+  }
+  if (pearwiki_filter_ignore_tags($format)) {
+    $wiki->insertRule('ignoretag', 'delimiter');
+  }
+  if (!pearwiki_filter_use_wiki_links($format)) {
+    $wiki->disableRule('wikilink');
+  }
+
+  // general render setup
+// Todo: this is at the moment directly called from the wikilink render rule
+//  $wiki->setRenderConf('xhtml', 'wikilink', 'exists_callback', 'pearwiki_filter_page_path');
+  $wiki->setRenderConf('xhtml', 'wikilink', 'view_url', base_path());
+  $wiki->setRenderConf('xhtml', 'wikilink', 'new_url', base_path());
+  $wiki->setRenderConf('xhtml', 'wikilink', 'css', null);
+  $wiki->setRenderConf('xhtml', 'wikilink', 'css_new', null);
+  $wiki->setRenderConf('xhtml', 'wikilink', 'style_new', null);
+  $wiki->setRenderConf('xhtml', 'wikilink', 'new_text', NULL);
+  $wiki->setRenderConf('xhtml', 'wikilink', 'target', NULL);
+  $wiki->setRenderConf('xhtml', 'interwiki', 'target', NULL);
+  $wiki->setRenderConf('xhtml', 'interwiki', 'sites', pearwiki_filter_interwiki_mappings($format));
+  $wiki->setRenderConf('xhtml', 'url', 'target', null);
+  $wiki->setRenderConf('xhtml', 'image', 'base', pearwiki_filter_image_base($format));
+
+  // load format dependent options
+  $setupfunction = 'pearwiki_filter_'.strtolower($formatname).'_config';
+  if (function_exists($setupfunction)) {
+    $setupfunction($wiki);
+  }
+
+  $wiki->parse($text);
+
+  // Note: for the format config the X of Xhtml has to be in uppercase in the CVS Version of 12/20/06
+  // if this options is not set, special characters like ä,ö,ü dont work properly although the default encoding allow them
+  $wiki->setFormatConf('Xhtml', 'translate', HTML_SPECIALCHARS);
+
+  return $wiki->render();
+}
+
+/**
+ * Callback to get drupal path for a page title.
+ */
+function pearwiki_filter_page_path($page) {
+  global $pearwiki_current_format;
+
+  $space_replacement = pearwiki_filter_space_replacement($pearwiki_current_format);
+  if ($space_replacement) {
+    $page = str_replace(' ', $space_replacement, $page);
+  }
+  
+  $path = '';
+
+  // When wikitools is enabled, just create a wikitools link.
+  if (pearwiki_filter_use_wikitools($pearwiki_current_format) && module_exists('wikitools')) {
+    $path = wikitools_wikilink_drupal_path($page);
+  }
+  elseif (pearwiki_filter_use_freelinking($pearwiki_current_format)) {
+    // When freelinking is enabled, just create a freelinking link.
+    $path = 'freelinking/' . urlencode($page);
+  }
+  elseif (pearwiki_filter_use_liquid($pearwiki_current_format)) {
+  // When liquid is enabled, create a link to liquid.
+    $path = 'wiki/' . urlencode($page);
+  }
+  else {
+    // Try to find the node and link to it directly.
+    $node = db_fetch_object(db_query("SELECT nid FROM {node} WHERE LOWER(title)=LOWER('%s')", $page));
+    if ($node) {
+      $path = 'node/'.$node->nid;
+    }
+    else {
+      // The page was not found.
+      $path = pearwiki_filter_wikilink_base($pearwiki_current_format) . urlencode($page);
+    }
+  }
+  return (variable_get('clean_url', 0) ? '' : '?q=') . $path;
+}
+
+/*
+ * Format sepcific helper functions
+ */
+
+function pearwiki_filter_interwiki_help_tip($format, $long = false) {
+  $output = '';
+  $mappings = pearwiki_filter_interwiki_mappings($format, 'array');
+  if (count($mappings)) {
+    if ($long) {
+      $output .= '<p>' . t('You can use the following interwiki links:') . '</p>';
+      $output .= '<ul>';
+      foreach($mappings as $key => $info) {
+        $output .= '<li>' . $key . ': '. $info['title'] . t(' - mapped to %url', array('%url' => $info['url'])) . '</li>';
+      }
+      $output .= '</ul>';
+    } else {
+      $output .= t('You can use the following interwiki links: ');
+      $output .= implode(', ', array_keys($mappings));
+    }
+  }
+  return $output;
+}
+
+// Mediawiki specific functions
+// ----------------------------
+
+function pearwiki_filter_mediawiki_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'Mediawiki';
+
+    case 'syntax_url':
+      return 'http://meta.wikimedia.org/wiki/Cheatsheet';
+
+    case 'tips':
+      $output = '';
+      if ($long) {
+        $output .= '<p>' . t('You can use <a href="http://meta.wikimedia.org/wiki/Cheatsheet"><em>Mediawiki</em> syntax</a>. It is possible that not all formatting options are supported at the moment.') . '</p>';
+        $output .= '<p>' . t('You can link to internal content by using the title of a node. Use [[Node Title]] to link to the node with the corrseponding name. An alternate title can be specified like this: [[Node Title|Link title]]') . '</p>';
+        $output .= '<p>' . t('External links are detected automatically. So just type http://example.com for the link. If you want a different title, use the following syntax: [http://example.com some link title].') . '</p>';
+        $interwiki_help = pearwiki_filter_interwiki_help_tip($format, true);
+        if ($interwiki_help) {
+          $output .= '<p>' . t('You can use interwiki links. Type [[site:Page Title]] to link to a page on a different site.');
+          $output .= ' ' . substr($interwiki_help, 3);
+        }
+      }
+      else {
+        $output .= '<p>' . t('You can use <a href="http://meta.wikimedia.org/wiki/Cheatsheet"><em>Mediawiki</em> syntax</a>. It is possible that not all formatting options are supported at the moment.') . '<br/>';
+        $output .= t('Links to other pages: [[Page Title]] or [[path/to/page|Title]].') . '<br/>';
+        $output .= t('External links: http://example.com or [http://example.com some link title].') . '<br/>';
+        $interwiki_help = pearwiki_filter_interwiki_help_tip($format, false);
+        if ($interwiki_help) {
+          $output .= t('Interwiki links: [[site:Page Title]].') . '<br/>';
+          $output .= $interwiki_help;
+        }
+        $output .= '</p>';
+      }
+      return $output;
+  }
+}
+
+function pearwiki_filter_mediawiki_config(&$wiki) {
+  $wiki->addPath('parse',  realpath(pearwiki_filter_pear_override_directory($format)).'/parse_mediawiki');
+  $wiki->insertRule('image', 'break');
+  $wiki->insertRule('interwiki', 'image');
+}
+
+// TikiWiki specific functions
+// ---------------------------
+
+function pearwiki_filter_tiki_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'TikiWiki';
+
+    case 'syntax_url':
+      return 'http://tikiwiki.org/tiki-index.php?page=WikiSyntax';
+
+    case 'tips':
+      $output = '';
+      $output .= '<p>' . t('You can use <a href="http://tikiwiki.org/tiki-index.php?page=WikiSyntax"><em>TikiWiki</em> syntax</a>. It is possible that not all formatting options are supported at the moment.') . '</p>';
+      $output .= '<p>' . t('You can link to internal content by using the page title or the path. A link to a node can either be made using ((Node Title)) or ((node/3)) using the corresponding node id.') . '</p>';
+      $output .= '<p>' . t('External links are detected automatically. If you want a description, use the following syntax: [http://example.com some|link title].') . '</p>';
+      return $output;
+  }
+}
+
+function pearwiki_filter_tiki_config(&$wiki) {
+}
+
+// DokuWiki specific functions
+// ---------------------------
+
+function pearwiki_filter_doku_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'DokuWiki';
+
+    case 'syntax_url':
+      return 'http://wiki.splitbrain.org/wiki:syntax';
+
+    case 'tips':
+      return '';
+  }
+}
+
+function pearwiki_filter_doku_config(&$wiki) {
+}
+
+// Creole specific functions
+// -------------------------
+
+function pearwiki_filter_creole_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'Creole';
+    case 'syntax_url':
+      return 'http://www.wikicreole.org/wiki/EditPageHelp';
+    case 'tips':
+      return '';
+  }
+}
+
+function pearwiki_filter_creole_config(&$wiki) {
+}
+
+// CoWiki specific functions
+// -------------------------
+
+function pearwiki_filter_cowiki_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'CoWiki';
+    case 'syntax_url':
+      return 'http://cowiki.org/';
+    case 'tips':
+      return 'This Wikitype is discontinued. You should not use this format.';
+  }
+}
+
+// BBCode specific functions
+// -------------------------
+
+function pearwiki_filter_bbcode_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'BBCode';
+    case 'syntax_url':
+      return 'http://en.wikipedia.org/wiki/BBCode';
+    case 'tips':
+      return '';
+  }
+}
+
+// Default syntax specific functions
+// ---------------------------------
+
+function pearwiki_filter_default_help($op, $long = false, $format = 0) {
+  switch ($op) {
+    case 'name':
+      return 'Default';
+    case 'syntax_url':
+      return 'http://wiki.ciaweb.net/yawiki/index.php?area=Text_Wiki&page=SamplePage';
+    case 'tips':
+      return '';
+  }
+}
+
+function pearwiki_filter_default_config(&$wiki) {
+}
+

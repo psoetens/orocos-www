@@ -1,0 +1,9 @@
+; $Id $
+name = Mailhandler
+description = "Accepts submissions via e-mail."
+
+; Information added by drupal.org packaging script on 2008-09-17
+version = "5.x-1.4"
+project = "mailhandler"
+datestamp = "1221669334"
+

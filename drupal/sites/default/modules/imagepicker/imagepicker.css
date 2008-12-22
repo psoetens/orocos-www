@@ -1,0 +1,52 @@
+body {
+	background-color: white!important;
+}
+tbody {
+  border-top: 0;
+}
+
+#imgp {
+	clear: both;
+	padding-top: 10px;
+}
+.imgp_holder {
+	float: left;
+	margin: 10px;
+	border: 1px solid #cbd3d8;
+	width: 100px;
+	height: 100px;
+	text-align: center;
+	padding: 2px;
+}
+.imgp_holder a {
+	display: block;
+	height: 100px;
+	width: 100px;
+}
+.imgp_img_options {
+	width: 120px;
+	float: left;
+}
+.imgp_img_options .form-item {
+	margin-top: 0;
+}
+#imgp_img_holder {
+	float: left;
+	margin-right: 40px;
+	margin-left: 20px;
+}
+#imgp_controls {
+	padding-top: 10px;
+	clear: both;
+}
+
+#imgp_page_img {
+	text-align: center;
+	margin: 15px;
+}
+#imgp_edit_form {
+	float: left;
+}
+#imgp_edit_form .form-item {
+	margin-top: 0;
+}

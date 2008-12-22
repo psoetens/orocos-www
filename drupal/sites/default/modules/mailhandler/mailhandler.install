@@ -1,0 +1,86 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function mailhandler_install() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      db_query("
+        CREATE TABLE {mailhandler} (
+          mid         int(10) unsigned not null auto_increment primary key,
+          mail        varchar(255) not null,
+          domain      varchar(255) not null,
+          port        int(5) unsigned not null,  
+          name        varchar(255) not null,
+          pass        varchar(255) not null,
+          security    tinyint unsigned not null,
+          replies     tinyint unsigned not null default '1',
+          fromheader  varchar(128),
+          commands    text,  
+          sigseparator  varchar(128),
+          enabled     tinyint,
+          folder varchar(255) not null,
+          imap tinyint unsigned not null,
+          mime VARCHAR (128),
+          mailto varchar(255) not null,
+          delete_after_read tinyint unsigned not null default '1',
+          extraimap varchar(255) not null,
+          format int(4) NOT NULL default '0',
+          KEY (mail)
+        ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
+  break;  
+   case 'pgsql':
+   db_query("
+        CREATE TABLE {mailhandler} (
+          mid         serial,
+          mail        text not null,
+          domain      text not null,
+          port        integer not null,  
+          name        text not null,
+          pass        text not null,
+          security    integer not null,
+          replies     integer not null default 1,
+          fromheader  text,
+          commands    text,  
+          sigseparator  text,
+          enabled     integer,
+          folder      text not null,
+          imap        integer not null,
+          mime        text,
+          mailto      text not null,
+          delete_after_read integer not null default 1,
+          extraimap text not null,
+          format integer NOT NULL default 0,
+          PRIMARY KEY (mid)
+        ); 
+   
+   ");
+   break;
+  }
+}
+
+/**
+ * Update database hooks
+ */
+function mailhandler_update_1() {
+  return _system_update_utf8(array('mailhandler'));
+}
+
+/**
+ * Check that the IMAP extension exists for PHP.
+ */
+function mailhandler_requirements($phase) {
+  // Ensure translations don't break at install time
+  $t = get_t();
+  
+  $has_imap = function_exists('imap_open');
+  $requirements['mailhandler'] = array(
+    'title' => $t('IMAP'),
+    'description' => $t("Mailhandler requires that PHP's !ext is enabled in order to function properly.", array('!ext' => l('IMAP extension', 'http://www.php.net/imap'))),
+    'value' => $has_imap ? $t('Enabled') : $t('Not found'),
+    'severity' => $has_imap ? REQUIREMENT_OK : REQUIREMENT_ERROR,
+  );
+  return $requirements;
+}

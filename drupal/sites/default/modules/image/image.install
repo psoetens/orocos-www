@@ -1,0 +1,156 @@
+<?php
+// $Id: image.install,v 1.1.4.11 2007/08/27 22:48:27 drewish Exp $
+
+/**
+ * Installing and updating image.module.
+ */
+function image_install() {
+  // Nothing to do.
+}
+
+function image_uninstall() {
+  variable_del('image_max_upload_size');
+  variable_del('image_updated');
+  variable_del('image_default_path');
+  variable_del('image_sizes');
+}
+
+/**
+ * Update 4.5 to 4.6 or later.
+ */
+function image_update_1() {
+  if (db_table_exists('image')) {
+    if ($result = db_query("SELECT * FROM {image}")) {
+      $fields = array('thumb_path' => 'thumbnail',
+                      'preview_path' => 'preview',
+                      'image_path' => '_original');
+
+      while ($old_image = db_fetch_object($result)) {
+        foreach ($fields as $old => $new) {
+          $old_file = '';
+          if (file_exists($old_image->$old)) {
+            $old_file = $old_image->$old;
+          }
+          else {
+            $old_file = file_create_path($old_image->$old);
+          }
+          if ($old_file && $old_image->$old != '' && db_num_rows(db_query("SELECT fid FROM {files} WHERE nid=%d and filename='%s'", $old_image->nid, $new)) == 0) {
+            _image_insert($old_image, $new, $old_file);
+          }
+        }
+      }
+    }
+  }
+  return array();
+}
+
+/**
+ * Upgrade to the new image_sizes variable format.
+ */
+function image_update_2() {
+  $sizes = variable_get('image_sizes', FALSE);
+  if ($sizes) {
+    $new_sizes = array(IMAGE_ORIGINAL => array('width' => '', 'height' => '', 'label' => t('Original')));
+    foreach ($sizes as $size) {
+      $key = drupal_strtolower($size['label']);
+      $size['label'] = drupal_ucfirst($size['label']);
+      $new_sizes[$key] = $size;
+    }
+    variable_set('image_sizes', $new_sizes);
+  }
+  return array();
+}
+
+/**
+ * Add the link field to each size.
+ */
+function image_update_3() {
+  $sizes = variable_get('image_sizes', FALSE);
+  if ($sizes) {
+    $new_sizes = array();
+    foreach ($sizes as $key => $size) {
+      $size['link'] = 1;
+      $new_sizes[$key] = $size;
+    }
+    variable_set('image_sizes', $new_sizes);
+  }
+  return array();
+}
+
+/**
+ * Clean up all the records that aren't in the files directory.
+ */
+function image_update_4() {
+  $ret = array();
+
+  // Locate image files that aren't stored in the files directory.
+  $files_path = rtrim(file_directory_path(), '\\/');  
+  $result = db_query("SELECT f.nid, f.fid, f.filename, f.filepath FROM {files} f INNER JOIN {node} n ON f.nid = n.nid WHERE n.type = 'image' AND f.filename = '_original' AND NOT f.filepath LIKE '%s/%%'", $files_path);
+  while ($file = db_fetch_object($result)) {
+    $file->filepath = file_create_path($file->filepath);
+    if (file_exists($file->filepath)) {
+      // File exists, make sure there's not a duplicate record.
+      if (db_result(db_query("SELECT COUNT(*) FROM {files} f INNER JOIN {node} n ON f.nid = n.nid WHERE n.type = 'image' AND filepath = '%s' AND fid <> %d", $file->filepath, $file->fid))) {
+        $ret[] = update_sql("DELETE FROM {files} WHERE fid = ". (int)$file->fid);
+        $ret[] = update_sql("DELETE FROM {file_revisions} WHERE fid = ". (int)$file->fid);
+      }
+      else {
+        $ret[] = update_sql("UPDATE {files} SET filepath = '". db_escape_string($file->filepath) ."' WHERE fid = ". (int)$file->fid);
+      }
+    }
+    else {
+      $ret[] = update_sql("DELETE FROM {files} WHERE fid = ". (int)$file->fid);
+      $ret[] = update_sql("DELETE FROM {file_revisions} WHERE fid = ". (int)$file->fid);
+    }
+  }
+
+  // Check for and remove {files} with duplicate filenames.
+  $result = db_query("SELECT f1.fid, f1.nid, f1.filepath FROM {files} f1 INNER JOIN {node} n ON f1.nid = n.nid  WHERE n.type = 'image' AND EXISTS ( SELECT * FROM {files} f2 WHERE f2.filepath = f1.filepath AND f1.fid <> f2.fid AND f1.fid < f2.fid )");
+  while ($file = db_fetch_object($result)) {
+    $ret[] = update_sql("DELETE FROM {files} WHERE fid = ". (int)$file->fid);
+  }
+
+  // Delete rows from {file_revisions} that don't have matching {files}. 
+  $ret[] = update_sql("DELETE FROM {file_revisions} WHERE NOT EXISTS (SELECT * FROM {files} WHERE {files}.fid = {file_revisions}.fid)");
+
+  return $ret;
+}
+
+/**
+ * Make sure that everyone's size settings are in the right format.
+ */
+function image_update_5() {
+  $ret = array();
+
+  if ($old_sizes = variable_get('image_sizes', FALSE)) {
+    // Make sure all the required sizes are represented.
+    if (!isset($old_sizes[IMAGE_ORIGINAL])) {
+      drupal_set_message(t("The original image size was missing so no changes were made. See this <a href='!link'>image module issue</a> for more information. Include the following:<br /><pre>@old_sizes\n</pre>", array('!link' => url('http://drupal.org/node/158334'), '@old_sizes' => print_r($old_sizes, 1))), 'error');
+      return array();
+    }
+    // These sizes may already exist under incorrect keys. We'll put a default
+    // copy in that will either be overwritten by the existing version, or used
+    // if there isn't an existing version.
+    if (!isset($old_sizes[IMAGE_PREVIEW])) {
+      $old_sizes[IMAGE_PREVIEW] = array('width' => 640, 'height' => 640, 'label' => t('Preview'), 'link' => IMAGE_LINK_SHOWN);
+    }
+    if (!isset($old_sizes[IMAGE_THUMBNAIL])) {
+      $old_sizes[IMAGE_THUMBNAIL] = array('width' => 100, 'height' => 100, 'label' => t('Thumbnail'), 'link' => IMAGE_LINK_SHOWN);
+    }
+
+    $new_sizes = array();
+    foreach ($old_sizes as $old_key => $size) {
+      // Keys should be lowercase and less than 32 chars long.
+      $new_key = drupal_strtolower(drupal_substr($old_key, 0, 32));
+      // Update the files.
+      if ($new_key != $old_key) {
+        $ret[] = update_sql("UPDATE {files} f INNER JOIN {node} n ON f.nid = n.nid SET f.filename = '". db_escape_string($new_key) ."' WHERE n.type = 'image' AND filename = '". db_escape_string($old_key) ."'");
+      }
+      $new_sizes[$new_key] = $size;
+    }
+    // Save the sizes.
+    variable_set('image_sizes', $new_sizes);
+  }
+
+  return $ret;
+}

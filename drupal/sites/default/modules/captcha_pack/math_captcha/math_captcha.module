@@ -1,0 +1,251 @@
+<?php
+// $Id: math_captcha.module,v 1.4 2007/11/06 10:18:03 soxofaan Exp $
+
+/**
+ * Implementation of a math CAPTCHA, for use with the CAPTCHA module
+ */
+
+
+/**
+ * Implementation of hook_menu().
+ */
+function math_captcha_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array(
+      'path' => 'admin/user/captcha/math_captcha',
+      'title' => t('Math CAPTCHA'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('math_captcha_settings_form'),
+      'type' => MENU_LOCAL_TASK,
+    );
+  }
+  return $items;
+}
+
+/**
+ * Function for getting the enabled challenges (e.g. for use as checkboxes default_value)
+ */
+function _math_captcha_enabled_challenges() {
+  $enabled = variable_get('math_captcha_enabled_challenges', array(
+    'addition' => 'addition',
+    'subtraction' => 'subtraction',
+    'multiplication' => 'multiplication'
+  ));
+  return $enabled;
+}
+
+/**
+ * Math CAPTCHA settings form
+ */
+function math_captcha_settings_form() {
+  $form = array();
+  $enabled_challenges = _math_captcha_enabled_challenges();
+  $form['math_captcha_enabled_challenges'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Enabled math challenges'),
+    '#options' => array(
+      'addition' => t('Addition: x + y = z'),
+      'subtraction' => t('Subtraction: x - y = z'),
+      'multiplication' => t('Multiplication: x * y = z'),
+    ),
+    '#default_value' => $enabled_challenges,
+    '#description' => t('Select the math challenges you want to enable.'),
+  );
+  $form['math_captcha_textual_numbers'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Textual representation of numbers',
+    '#default_value' => variable_get('math_captcha_textual_numbers', TRUE),
+    '#description' => t('When enabled, the numbers in the challenge will get a textual representation if available. E.g. "four" instead of "4".'),
+  );
+  $form['math_captcha_textual_operators'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Textual representation of operators',
+    '#default_value' => variable_get('math_captcha_textual_operators', FALSE),
+    '#description' => t('When enabled, the operators in the challenge will get a textual representation if available. E.g. "plus" instead of "+".'),
+  );
+  // Addition challenge
+  $form['math_captcha_addition'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Addition challenge: x + y = z'),
+  );
+  $form['math_captcha_addition']['math_captcha_addition_argmax'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Maximum value for x and y'),
+    '#default_value' => variable_get('math_captcha_addition_argmax', 10),
+  );
+  $form['math_captcha_addition']['math_captcha_addition_allow_negative'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow negative values for x and y'),
+    '#default_value' => variable_get('math_captcha_addition_allow_negative', FALSE),
+  );
+  // subtraction challenge
+  $form['math_captcha_subtraction'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Subtraction challenge: x - y = z'),
+  );
+  $form['math_captcha_subtraction']['math_captcha_subtraction_argmax'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Maximum value for x and y'),
+    '#default_value' => variable_get('math_captcha_subtraction_argmax', 10),
+  );
+  $form['math_captcha_subtraction']['math_captcha_subtraction_allow_negative'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow negative values for x, y and z'),
+    '#default_value' => variable_get('math_captcha_subtraction_allow_negative', FALSE),
+  );
+  // multiplication challenge
+  $form['math_captcha_multiplication'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Multiplication challenge: x * y = z'),
+  );
+  $form['math_captcha_multiplication']['math_captcha_multiplication_argmax'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Maximum value for x and y'),
+    '#default_value' => variable_get('math_captcha_multiplication_argmax', 5),
+  );
+  $form['math_captcha_multiplication']['math_captcha_multiplication_allow_negative'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow negative values for x, y'),
+    '#default_value' => variable_get('math_captcha_multiplication_allow_negative', FALSE),
+  );
+  // add buttons and return
+  return system_settings_form($form);
+}
+
+/**
+ * Helper function for transforming a number to a textual representation
+ */
+function _math_captcha_repr($n, $add_paratheses_when_negative=FALSE) {
+  // start with no textual representation
+  $t = "$n";
+  // if enabled and available: do textual representation
+  if (variable_get('math_captcha_textual_numbers', TRUE)) {
+    $repr_map = array(
+      0 => t('zero'), 1 => t('one'), 2 => t('two'), 3 => t('three'),
+      4 => t('four'), 5 => t('five'), 6 => t('six'), 7 => t('seven'), 8 => t('eight'),
+      9 => t('nine'), 10 => t('ten'), 11 => t('eleven'), 12 => t('twelve'),
+      13 => t('thirteen'), 14 => t('fourteen'), 15 => t('fifteen'),
+    );
+    if (array_key_exists(abs($n), $repr_map)) {
+      $t = $repr_map[abs($n)];
+      if ($n < 0) {
+        $t = t('minus !number', array('!number' => $t));
+      }
+    }
+  }
+  if ($add_paratheses_when_negative && $n < 0) {
+    $t = "($t)";
+  }
+  return $t;
+}
+
+function _math_captcha_repr_op($op) {
+  // start with no textual representation
+  $t = "$op";
+  // if enabled and available: do textual representation
+  if (variable_get('math_captcha_textual_operators', FALSE)) {
+    $repr_map = array('+' => t('plus'), '-' => t('minus'), '*' => t('times'), '=' => t('equals'));
+    if (array_key_exists($op, $repr_map)) {
+      $t = $repr_map[$op];
+    }
+  }
+  return $t;
+}
+/**
+ * helper function to build a math CAPTCHA form item
+ */
+function _math_captcha_build_captcha($x, $y, $operator, $result) {
+  $form_item = array();
+  $form_item['form']['captcha_response'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Math question'),
+    '#required' => TRUE,
+    '#size' => 3,
+    '#maxlength' => 2,
+    '#description' => t('Solve this math question and enter the solution with digits. E.g. for "two plus four = ?" enter "6".'),
+  );
+  switch (mt_rand(0, 2)) {
+    case 0: // question like "x + y = ?"
+      $form_item['solution'] = "$result";
+      $form_item['form']['captcha_response']['#field_prefix'] = _math_captcha_repr($x, TRUE) .' '. _math_captcha_repr_op($operator) .' '. _math_captcha_repr($y, TRUE) .' '. _math_captcha_repr_op('=');
+      break;
+    case 1: // question like "x + ? = z"
+      $form_item['solution'] = "$y";
+      $form_item['form']['captcha_response']['#field_prefix'] = _math_captcha_repr($x, TRUE) .' '. _math_captcha_repr_op($operator) .' ';
+      $form_item['form']['captcha_response']['#field_suffix'] = ' '. _math_captcha_repr_op('=') .' '. _math_captcha_repr($result);
+      break;
+    case 2: // question like "? + y = z"
+      $form_item['solution'] = "$x";
+      $form_item['form']['captcha_response']['#field_suffix'] = ' '. _math_captcha_repr_op($operator) .' '. _math_captcha_repr($y, TRUE) .' '. _math_captcha_repr_op('=') .' '. _math_captcha_repr($result);
+      break;
+  }
+  return $form_item;
+}
+
+/**
+ * function for addition challenges
+ */
+function _math_captcha_addition_challenge() {
+  $argmax = variable_get('math_captcha_addition_argmax', 10);
+  if (variable_get('math_captcha_addition_allow_negative', FALSE)) {
+    $x = mt_rand(-$argmax, $argmax);
+    $y = mt_rand(-$argmax, $argmax);
+  }
+  else {
+    $x = mt_rand(0, $argmax);
+    $y = mt_rand(0, $argmax);
+  }
+  $solution = $x + $y;
+  return _math_captcha_build_captcha($x, $y, '+', $solution);
+}
+
+/**
+ * function for subtraction challenges
+ */
+function _math_captcha_subtraction_challenge() {
+  $argmax = variable_get('math_captcha_subtraction_argmax', 10);
+  if (variable_get('math_captcha_subtraction_allow_negative', FALSE)) {
+    $x = mt_rand(-$argmax, $argmax);
+    $y = mt_rand(-$argmax, $argmax);
+  }
+  else {
+    $y = mt_rand(0, $argmax);
+    $x = mt_rand($y, $argmax);
+  }
+  $solution = $x - $y;
+  return _math_captcha_build_captcha($x, $y, '-', $solution);
+}
+
+/**
+ * function for multiplication challenges
+ */
+function _math_captcha_multiplication_challenge() {
+  $argmax = variable_get('math_captcha_multiplication_argmax', 5);
+  $x = mt_rand(1, $argmax);
+  $y = mt_rand(1, $argmax);
+  if (variable_get('math_captcha_multiplication_allow_negative', FALSE)) {
+    $x = $x * (mt_rand(0, 1) * 2 - 1);
+    $y = $y * (mt_rand(0, 1) * 2 - 1);
+  }
+  $solution = $x * $y;
+  return _math_captcha_build_captcha($x, $y, '*', $solution);
+}
+
+/**
+ * Implementation of hook_captcha().
+ */
+function math_captcha_captcha($op, $captcha_type='') {
+  switch ($op) {
+    case 'list':
+      return array('Math CAPTCHA');
+    case 'generate':
+      if ($captcha_type == 'Math CAPTCHA') {
+        // get the available challenges
+        $challenges = array_filter(_math_captcha_enabled_challenges());
+        $challenge = $challenges[array_rand($challenges)];
+        $form_item = call_user_func("_math_captcha_{$challenge}_challenge");
+        return $form_item;
+      }
+  }
+}

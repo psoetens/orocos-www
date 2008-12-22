@@ -1,0 +1,10 @@
+; $Id: taxonomy_breadcrumb.info,v 1.1.2.1 2007/01/20 05:15:59 craig Exp $
+name = Taxonomy breadcrumb
+description = Enables taxonomy based breadcrumbs and allows for node assosciations with taxonomy terms.
+version = "$Name: DRUPAL-5--1-4 $"
+dependencies = taxonomy
+
+; Information added by drupal.org packaging script on 2007-03-16
+version = "5.x-1.4"
+project = "taxonomy_breadcrumb"
+

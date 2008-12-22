@@ -1,0 +1,10 @@
+name = Imagepicker
+description = Upload, browse and add images to your nodes.
+package = Other
+
+
+; Information added by drupal.org packaging script on 2008-06-14
+version = "5.x-1.0"
+project = "imagepicker"
+datestamp = "1213443020"
+

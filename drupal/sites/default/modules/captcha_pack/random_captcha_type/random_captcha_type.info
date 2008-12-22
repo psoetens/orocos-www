@@ -1,0 +1,11 @@
+; $Id: random_captcha_type.info,v 1.3 2007/09/15 08:59:23 soxofaan Exp $
+name = "Random CAPTCHA type"
+description = "Provides a 'meta' CAPTCHA that randomly picks a CAPTCHA type."
+package = "Spam control"
+dependencies = captcha
+
+; Information added by drupal.org packaging script on 2007-12-22
+version = "5.x-1.1"
+project = "captcha_pack"
+datestamp = "1198328103"
+

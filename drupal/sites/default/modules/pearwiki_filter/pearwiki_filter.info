@@ -1,0 +1,8 @@
+; $Id: pearwiki_filter.info,v 1.1 2007/01/05 01:03:35 roetzi Exp $
+name = "PEAR Wiki filter"
+description = "Filter which uses Text/Wiki package of PEAR for formatting"
+
+; Information added by drupal.org packaging script on 2007-03-03
+version = "5.x-1.1"
+project = "pearwiki_filter"
+

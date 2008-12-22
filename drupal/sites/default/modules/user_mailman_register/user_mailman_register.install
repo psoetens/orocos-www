@@ -1,0 +1,117 @@
+<?php
+  //; $Id: user_mailman_register.install,v 1.3.2.3 2008/02/19 17:50:38 samuelet Exp $
+function user_mailman_register_install() {
+  variable_set('user_mailman_register_required', 0);
+  variable_set('user_mailman_register_registerform', 1);
+  variable_set('user_mailman_register_defaultnewreg', 0);
+  variable_set('user_mailman_register_ownform', 1);
+  variable_set('user_mailman_register_profilename', '');
+  switch ($GLOBALS['db_type']) {
+  case 'pgsql':
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN webadmin TEXT");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN webadmin SET DEFAULT ''"); 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN webpass TEXT");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN webpass SET DEFAULT ''");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_invite BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN user_invite SET DEFAULT 0");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_notify BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN user_notify SET DEFAULT 0");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_admin_notify BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN user_admin_notify SET DEFAULT 0");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_unsubscribe BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN allow_unsubscribe SET DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_temp_disable BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN allow_temp_disable SET DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_digest BOOLEAN");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN allow_digest SET DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN description TEXT");
+    db_query("ALTER TABLE {mailman_lists} ALTER COLUMN description SET DEFAULT ''"); 
+    break; 
+    
+  case 'mysql': 
+  case 'mysqli': 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN webadmin varchar(72) DEFAULT ''"); 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN webpass varchar(48) DEFAULT ''");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_invite boolean DEFAULT 0"); 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_notify boolean DEFAULT 0"); 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN user_admin_notify boolean DEFAULT 0"); 
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_unsubscribe boolean DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_temp_disable boolean DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN allow_digest boolean DEFAULT 1");
+    db_query("ALTER TABLE {mailman_lists} ADD COLUMN description mediumtext NOT NULL");
+    break; 
+  }
+  
+  }
+
+function user_mailman_register_uninstall() {
+  variable_del('user_mailman_register_required');
+  variable_del('user_mailman_register_registerform');
+  variable_del('user_mailman_register_defaultnewreg');
+  variable_del('user_mailman_register_ownform');
+  variable_del('user_mailman_register_profilename');
+  switch ($GLOBALS['db_type']) {
+  case 'pgsql':
+  case 'mysql':
+  case 'mysqli':
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN webadmin;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN webpass;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN user_invite;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN user_notify;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN user_admin_notify;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN allow_unsubscribe;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN allow_temp_disable;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN allow_digest;");
+    db_query("ALTER TABLE {mailman_lists} DROP COLUMN description;");
+    break;
+  }
+}
+
+// Increase the webadmin field lenght.
+function user_mailman_register_update_1() { 
+    $ret = array(); 
+
+    switch ($GLOBALS['db_type']) { 
+    case 'pgsql': 
+      db_change_column($ret, 'mailman_lists', 'webadmin', 'webadmin', 'varchar(255)',  array('not null' => TRUE, 'default' => "''"));
+      break; 
+ 
+    case 'mysql': 
+    case 'mysqli': 
+        $ret[] = update_sql("ALTER TABLE {mailman_lists} CHANGE webadmin webadmin VARCHAR( 255 ) DEFAULT ''"); 
+        break; 
+    } 
+ 
+    return $ret; 
+}
+ 
+// Add more settings fields.
+function user_mailman_register_update_2() {
+    $ret = array(); 
+
+    switch ($GLOBALS['db_type']) { 
+    case 'pgsql': 
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_unsubscribe BOOLEAN");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN allow_unsubscribe SET DEFAULT 1");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_temp_disable BOOLEAN");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN allow_temp_disable SET DEFAULT 1");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_digest BOOLEAN");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN allow_digest SET DEFAULT 1");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN description TEXT");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN description SET DEFAULT ''");
+      break; 
+ 
+    case 'mysql': 
+    case 'mysqli': 
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_unsubscribe boolean DEFAULT 1"); 
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_temp_disable boolean DEFAULT 1");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN allow_digest boolean DEFAULT 1");
+      $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN description mediumtext NOT NULL");
+      break; 
+    } 
+
+    variable_set('user_mailman_register_defaultnewreg', 0);
+    variable_set('user_mailman_register_ownform', 1);
+    variable_set('user_mailman_register_profilename', '');
+    return $ret; 
+}
