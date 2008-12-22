@@ -80,6 +80,15 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
   RewriteEngine on
 
+# Redirect documentation to other server
+# Do not rewrite documents in /doc/ subdirs, as they are drupal
+# nodes !
+    RewriteCond %{REQUEST_URI} !.+/doc/.+
+#RewriteRule   ^(stable/.+/doc/.+)  http://www.orocos.org/$1 [R,L]
+# Only match physical .html pages here:
+RewriteRule   ^(stable.+)    http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
+RewriteRule   ^(devel.+)     http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
+
   # If your site can be accessed both with and without the 'www.' prefix, you
   # can use one of the following settings to redirect users to your preferred
   # URL, either WITH or WITHOUT the 'www.' prefix. Choose ONLY one option:
