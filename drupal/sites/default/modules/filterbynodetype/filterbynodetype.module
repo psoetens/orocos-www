@@ -1,0 +1,131 @@
+<?php
+// $Id: filterbynodetype.module,v 1.1.2.1 2007/06/11 05:55:25 crell Exp $
+
+/**
+ * Implementation of hook_menu
+ */
+function filterbynodetype_menu($may_cache) {
+  $items = array();
+
+   if ($may_cache) {
+      // We can't put this under the existing filters menu, sadly, because the help text added 
+      // by the filters module looks all out of place on our page the.
+      $items[] = array(
+        'path' => 'admin/settings/filterbynodetype',
+        'title' => t('Input filter node types'),
+        'callback' => 'drupal_get_form',
+        'callback arguments' => array('filterbynodetype_settings'),
+        'weight' => 2,
+        'access' => user_access('administer filters'),
+      );
+  }
+
+  return $items;
+}
+
+
+/**
+ * Implementation of hook_form_alter
+ */
+function filterbynodetype_form_alter($form_id, &$form) {
+  if (isset($form['type']) && 'node-form' == $form['#id']) {
+    $type = $form['type']['#value'];
+    $formats =& $form['body_filter']['format'];
+    foreach (element_children($formats) as $element) {
+      if (! variable_get('filterbynodetype_' . $formats[$element]['#return_value'] . '_' . $type, 1)) {
+        unset($formats[$element]);
+      }
+    }
+
+    if (2 == count(element_children($formats))) { // 1 format and 1 extra item for the link
+      // If there's only one filter left, fold it down to just the description
+      $formats = $form['body_filter']['format'];
+      unset($form['body_filter']['format']);
+      // We don't know what the IDs are of the two fields, so we have to iterate to get them.
+      foreach (element_children($formats) as $element) {
+        if (isset($formats[$element]['#title'])) {
+          // This is a filter, so we assign it to the filter set as the only option.
+          $form['body_filter']['format'][$element] = array(
+            '#type' => 'value',
+            '#value' => $element,
+            '#parents' => array('format'),
+          );
+          $form['body_filter']['format']['format'] = array( // I have no idea why it uses this structure, but this is what filter.module does.
+            '#type' => 'item',
+            '#description' => $formats[$element]['#description'],
+          );
+        }
+        else {
+          // It's the guidelines text.
+          $form['body_filter']['format']['guidelines_link'] = array(
+            '#value' => $formats[$element]['#value'],
+          );
+        }
+      }
+    }
+    if (1 == count(element_children($formats))) { // 1 extra item for the link, which means there's no filters left
+      // Do nothing.  The form becomes unsubmittable all on its own.
+    }
+  }
+}
+
+
+
+function filterbynodetype_settings() {
+  
+  $form = array();
+  
+  $types = node_get_types();
+  $formats = filter_formats();
+  
+  // Switch around to be filter-first.  Row-major order
+  
+  foreach ($formats as $format) {
+    $form['format_' . $format->format] = array(
+      '#type' => 'fieldset',
+      '#title' => t($format->name),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#tree' => FALSE,
+    );
+    foreach ($types as $type) {
+      $form['format_' . $format->format]['filterbynodetype_' . $format->format . '_' . $type->type] = array(
+        '#type' => 'checkbox',
+        '#title' => t($type->name),
+        '#default_value' => variable_get('filterbynodetype_' . $format->format . '_' . $type->type, 1),
+      );
+    }
+  }
+
+  return system_settings_form($form);
+}
+
+function theme_filterbynodetype_settings($form) {
+
+  $output = '';
+  $header = array('');
+  $rows = array();
+  $first = TRUE;
+
+  foreach (element_children($form) as $fieldset) {
+    if ('fieldset' != $form[$fieldset]['#type']) continue;   // Skip non-fieldset elements
+    
+    $row = array($form[$fieldset]['#title']); // The fieldset titles become row labels
+    foreach (element_children($form[$fieldset]) as $element) {
+      if ($first) {
+        $header[] = $form[$fieldset][$element]['#title'];
+      }
+      $form[$fieldset][$element]['#title'] = '';   // It's already in the header, so we don't need it here
+      $row[] = drupal_render($form[$fieldset][$element]);
+    }
+    $rows[] = $row;
+    $first = FALSE;
+    unset($form[$fieldset]);  // Ensure that we don't render the empty fieldset
+  }
+
+  $output = theme('table', $header, $rows);
+
+  $output .= drupal_render($form);
+
+  return $output;
+}
