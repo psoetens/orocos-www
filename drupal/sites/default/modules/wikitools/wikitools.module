@@ -516,9 +516,9 @@ function wikitools_node_validate($node) {
       if (!$nid && wikitools_treat_dash_as_space()) {
         $nid = db_result(db_query("SELECT nid FROM {node} WHERE LOWER(REPLACE(title, '-', ' ')) = LOWER(REPLACE('%s', '-', ' ')) AND $types_clause", $node->title));
       }
-      // It is only an error if the node which alredy exists is not the currently edited node.
+      // It is only an error if the node which already exists is not the currently edited node.
       if ($nid && $nid != $node->nid) {
-        form_set_error('title', t('A <a href="@page_url">page</a> with this name alredy exists.', array('@page_url' => url("node/$nid"))));
+        form_set_error('title', t('[Wikitools] A <a href="@page_url">page</a> with this Title already exists.', array('@page_url' => url("node/$
       }
     }
     // Check for disallowed characters in title.
