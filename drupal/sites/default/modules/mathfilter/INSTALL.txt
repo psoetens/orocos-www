@@ -1,0 +1,27 @@
+To enable this module, simply upload it to your modules folder and enable it in the regular admin interface.
+
+You must then configure one of your input filters (except for filter html, it will remove the html created by this module) to use the mathematics filter.
+
+However, in order to use the [tex] tags, you will need to download the appropriate Mimetex binary and install it on your server (usually just uploading it to the cgi-bin directory of your
+website is sufficient on a Linux server).  The binaries are available from http://www.forkosh.com/mimetex.html, where some instructions on the syntax of the derivative of TeX this filter
+uses.
+
+Some debugging tips from another user:
+
+"1. On my Drupal 5.1, Filtered HTML deletes the style attribute of the IFRAME that [graph] needs, and the iframe ends up cutting off the graphic because there's no sizing information. This
+ doesn't happen with Full HTML. (I don't know how to turn control Filtered HTML's behavior, unfortunately. I'd expect a checkbox on the filter page, but it's not there.)
+
+2. Note that the TeX filter uses the mimetex engine, stored where the server can find it (for example, in cgi-bin). However, the graph filter users Walter Zorn’s JavaScript graph library,
+ stored in mathfilter/js. So, if the module is properly configured for [tex], it may not be for [graph], and vice versa.
+
+3. If you want to make sure that the mimetex engine is being called from inside Drupal try something like this:
+<img src="cgi-bin/mimetex.cgi?f(x)=\int_{-\infty}^xe^{-t^2}dt" />
+
+But make sure that the paths in admin/settings/mathbuilder are configured for whatever works in this test.
+
+4. I put anything with square bracket tags (mathfilter, mapbuilder) highest on the filter list (like -10). And I put linebreak and smarkypants lowest (like 10). Then HTML goes in the middle.
+ That strategy seems to work OK, since the square bracket tags should be converted to HTML before any other HTML is generated."
+
+Also, this module now includes Image caching, which is a huge improvement.  In fact I am going to implement it (if possible) in the Wordpress version of this plugin and save my own server
+tonnes of hits on a cgi.  However the caching solution uses the cURL Php library which may or may not be installed on your server (it is most likely installed).  The module will confirm
+whether or not you have the cURL library (by checking for the existence of the curl_init Php function).

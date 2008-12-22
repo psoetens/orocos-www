@@ -1,0 +1,11 @@
+<?php
+// $ID$
+
+/**
+ *  Implementation of hook_uninstall().
+ */
+function mathfilter_uninstall() {
+  variable_del('mathfilter_dimension');
+	variable_del('mathfilter_caching');
+	variable_del('mathfilter_cgi');
+}

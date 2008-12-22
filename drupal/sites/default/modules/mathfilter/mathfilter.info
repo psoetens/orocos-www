@@ -1,0 +1,16 @@
+; $ID$
+name = Mathfilter
+description = Allows users to post mathematical equations between [tex] and [/tex] tags, and function graphs between [graph] and [/graph] tags.
+
+
+; Information added by drupal.org packaging script on 2007-06-19
+version = "5.x-1.0.x-dev"
+project = "mathfilter"
+datestamp = "1182212348"
+
+
+; Information added by drupal.org packaging script on 2007-09-20
+version = "5.x-1.1"
+project = "mathfilter"
+datestamp = "1190330424"
+
