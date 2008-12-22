@@ -1,0 +1,11 @@
+; $Id: geshinode.info,v 1.1.2.2 2007/09/22 17:30:30 soxofaan Exp $
+name = "GeSHi node"
+description = "Provides source code node with GeSHi syntax highlighting."
+package = "Filters"
+dependencies = geshifilter
+
+; Information added by drupal.org packaging script on 2008-06-02
+version = "5.x-2.8"
+project = "geshifilter"
+datestamp = "1212446410"
+

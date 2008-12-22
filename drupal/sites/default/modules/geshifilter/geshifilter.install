@@ -1,0 +1,40 @@
+<?php
+// $Id: geshifilter.install,v 1.2.2.2 2008/04/12 22:33:53 soxofaan Exp $
+
+/**
+ * Implementation of hook_install
+ */
+function geshifilter_install() {
+  // enable some popular languages by default
+  variable_set('geshifilter_language_enabled_php', TRUE);
+  variable_set('geshifilter_language_enabled_drupal5', TRUE);
+  variable_set('geshifilter_language_enabled_drupal6', TRUE);
+  variable_set('geshifilter_language_enabled_javascript', TRUE);
+  variable_set('geshifilter_language_enabled_java', TRUE);
+  variable_set('geshifilter_language_enabled_c', TRUE);
+  variable_set('geshifilter_language_enabled_cpp', TRUE);
+  variable_set('geshifilter_language_enabled_python', TRUE);
+  variable_set('geshifilter_language_enabled_ruby', TRUE);
+
+  // what to do next?
+  drupal_set_message(t('GeSHi filter is installed. You should now <a href="!geshi_admin">configure the GeSHi filter</a> and enable it in the desired <a href="!input_formats">input formats</a>.',
+    array('!geshi_admin' => url('admin/settings/geshifilter'), '!input_formats' => url('admin/settings/filters'))
+  ));
+}
+
+/**
+ * On uninstall: remove module variables and clear variable cache
+ */
+function geshifilter_uninstall() {
+  db_query("DELETE FROM {variable} WHERE name LIKE 'geshifilter_%'");
+  cache_clear_all('variables', 'cache');
+}
+
+/**
+ * Implementation of hook_update_N()
+ */
+function geshifilter_update_1() {
+  // clear the cache of available languages
+  variable_del('geshifilter_available_languages');
+  return array();
+}
