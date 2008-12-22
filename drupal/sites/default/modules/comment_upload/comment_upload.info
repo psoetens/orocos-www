@@ -1,0 +1,10 @@
+; $ID$
+name = Comment upload
+description = Allows users to attach files to comments.
+dependencies = upload comment
+
+; Information added by drupal.org packaging script on 2008-01-30
+version = "5.x-0.1"
+project = "comment_upload"
+datestamp = "1201726813"
+

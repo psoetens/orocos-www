@@ -1,0 +1,99 @@
+<?php
+
+function comment_upload_install() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      db_query("CREATE TABLE {comment_upload_files} (
+           fid int(10) unsigned NOT NULL default '0',
+           nid int(10) unsigned NOT NULL default '0',
+           cid int unsigned NOT NULL default '0',
+           filename varchar(255) NOT NULL default '',
+           filepath varchar(255) NOT NULL default '',
+           filemime varchar(255) NOT NULL default '',
+           filesize int(10) unsigned NOT NULL default '0',
+           description varchar(255) NOT NULL default '',
+           list tinyint(1) unsigned NOT NULL default 0,
+           PRIMARY KEY (fid),
+           KEY (nid)
+        ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      break;
+    case 'pgsql':
+      db_query("CREATE TABLE {comment_upload_files} (
+         fid serial CHECK (fid >= 0),
+         nid int_unsigned NOT NULL default 0,
+         cid int_unsigned NOT NULL default 0,
+         filename varchar(255) NOT NULL default '',
+         filepath varchar(255) NOT NULL default '',
+         filemime varchar(255) NOT NULL default '',
+         filesize int_unsigned NOT NULL default 0,
+         description varchar(255) NOT NULL default '',
+         list smallint_unsigned NOT NULL default 0,
+         PRIMARY KEY (fid)
+      )");
+      db_query("CREATE INDEX {comment_upload_files}_nid_idx ON {comment_upload_files} (nid)");
+      break;
+  }
+}
+
+function comment_upload_update_1() {
+  $ret = array();
+  $ret[] = update_sql("ALTER TABLE {comment_files} ADD nid int NOT NULL default '0'");
+
+  // loop through all the comment upload records and populate the nid column
+  $results = db_query("SELECT c.cid, c.nid FROM {comments} c WHERE c.cid IN (SELECT DISTINCT cf.cid FROM {comment_files} cf)");
+  while ($c = db_fetch_object($results)) {
+    $ret[] = update_sql("UPDATE {comment_files} SET nid = $c->nid WHERE cid = $c->cid");
+  }
+  return $ret;
+}
+
+/**
+ * Move previously saved data from {files}, {file_revisions} and {comment_files}
+ * into {comment_upload_files}.
+ */
+function comment_upload_update_2() {
+  $ret = array();
+  $ret[] = update_sql("CREATE TABLE {comment_upload_files} (
+          `fid` int(10) unsigned NOT NULL default '0',
+          `nid` int(10) unsigned NOT NULL default '0',
+          `cid` int NOT NULL default '0',
+          `filename` varchar(255) NOT NULL default '',
+          `filepath` varchar(255) NOT NULL default '',
+          `filemime` varchar(255) NOT NULL default '',
+          `filesize` int(10) unsigned NOT NULL default '0',
+           description varchar(255) NOT NULL default '',
+           list tinyint(1) unsigned NOT NULL default 0,
+           PRIMARY KEY (`fid`)
+        ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
+
+  $max_fid = db_result(db_query("SELECT MAX(fid) FROM {comment_files}"));
+  $results = db_query("SELECT f.fid, cf.nid, cf.cid, cf.cid, f.filename, f.filepath, f.filemime, f.filesize, r.list, r.description FROM {files} f INNER JOIN {file_revisions} r ON f.fid = r.fid INNER JOIN {comment_files} cf ON f.fid = cf.fid WHERE f.nid = 0");
+
+  while ($c = db_fetch_object($results)) {
+    db_query("INSERT INTO {comment_upload_files} (fid, nid, cid, filename, filepath, filemime, filesize, description, list) VALUES(%d, %d, %d, '%s', '%s', '%s', %d, '%s', %d)", $c->fid, $c->nid, $c->cid, $c->filename, $c->filepath, $c->filemime, $c->filesize, $c->description, $c->list);
+    db_query("DELETE FROM {files} WHERE fid = %d", $c->fid);
+    db_query("DELETE FROM {file_revisions} WHERE fid = %d", $c->fid);
+  }
+  if ($max_fid) {
+    $ret[] = update_sql("INSERT INTO {sequences} (name, id) VALUES('" . db_prefix_tables('{comment_upload_files}'). "_fid', $max_fid)");
+  }
+  $ret[] = update_sql("DROP TABLE {comment_files}");
+  return $ret;
+}
+
+/**
+ * Update column cid to be an unsigned int (MySQL only).
+ * Add index on nid.
+ */
+function comment_upload_update_3() {
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+      $ret[] = update_sql("ALTER TABLE {comment_upload_files} CHANGE COLUMN cid cid int unsigned NOT NULL default '0'");
+      $ret[] = update_sql("ALTER TABLE {comment_upload_files} ADD INDEX(nid)");
+    break;
+  }
+  return $ret;
+}

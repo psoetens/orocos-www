@@ -1,0 +1,8 @@
+TODO
+====
+
+* Get comment previews with attachments working.
+* Restrict uploading to users with proper permissions
+* Restrict uploading to specific node types
+* Restrict uploaded file/image sizes
+* Scale large images, ala inline.module

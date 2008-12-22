@@ -1,0 +1,349 @@
+<?php
+// $Id: comment_upload.module,v 1.6.2.12 2008/01/30 20:51:22 heine Exp $
+
+/**
+ * Implementation of hook_comment.
+ */
+function comment_upload_comment(&$comment, $op) {
+  $cid = is_object($comment) ? $comment->cid : $comment['cid'];
+  $cid = is_array($cid) ? $cid['#value'] : $cid;
+  switch ($op) {
+
+    case 'form':
+      $node = node_load($comment['nid']['#value']);
+      if (!user_access('upload files') || !variable_get('comment_upload_'. $node->type, 1)) {
+        break;
+      }
+      $cobj->cid = $cid;
+      $cobj->files = _comment_upload_load_files($cid);
+      _upload_prepare($cobj);
+      $form = array('#attributes' => array('enctype' => 'multipart/form-data'));
+      if (variable_get('comment_upload_single', 0)) {
+        $form['upload'] = array(
+        '#type' => 'file',
+          '#title' => t('Attachment'),
+          '#size' => 50,
+          '#description' => !empty($cobj->files) ? t('You already have a file uploaded, if you upload another it will overwrite the current one.') :''
+        );
+      }
+      else {
+        drupal_add_js('misc/progress.js');
+        drupal_add_js('misc/upload.js');
+
+        // Attachments fieldset
+        $form['attachments'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('File attachments'),
+          '#collapsible' => TRUE,
+          '#collapsed' => empty($cobj->files),
+          '#description' => t('Changes made to the attachments are not permanent until you save this post.'),
+          '#prefix' => '<div class="attachments">',
+          '#suffix' => '</div>',
+          '#weight' => 10,
+        );
+
+        // Wrapper for fieldset contents (used by upload JS).
+        $form['attachments']['wrapper'] = array(
+          '#prefix' => '<div id="attach-wrapper">',
+          '#suffix' => '</div>',
+        );
+        $form['attachments']['wrapper'] += _upload_form($cobj);
+
+        // Enable the upload_preview module (when enabled) to modify the attachment display.
+        if (module_exists('upload_preview')) {
+          _upload_preview_node_form($form['attachments']['wrapper']['files'], 0);
+        }
+
+        $form['attachments']['wrapper']['attach-url']['#value'] = url('comment_upload/js', NULL, NULL, TRUE);
+        $form['current']['cid'] = array('#type' => 'hidden', '#value' => $cid);
+        unset($form['attachments']['wrapper']['current']['vid']);
+      }
+      return $form;
+
+    case 'validate':
+      // When $op == 'validate', $comment is an array, whereas _upload_validate
+      // expects an object. We cast a copy of $comment to an object, as it is
+      // passed by reference and we don't want to affect other hook_comment
+      // implementations.
+
+      // Failure to implement the cast led to a security issue, see
+      // "SA-2008-015 - Comment Upload - Arbitrary file upload" for details.
+      $comment_copy = (object) $comment;
+      _upload_validate($comment_copy);
+      break;
+
+    case 'insert':
+    case 'update':
+      $node = node_load($comment['nid']);
+      if (user_access('upload files') && variable_get('comment_upload_'. $node->type, 1)) {
+        _comment_upload_save_files($comment);
+      }
+      break;
+
+    case 'delete':
+      _comment_upload_delete($cid);
+      break;
+
+    case 'view':
+      if (!user_access('view uploaded files')) {
+        break;
+      }
+      if (!isset($comment->files)) {
+        $comment->files = _comment_upload_load_files($cid, $comment->nid);
+      }
+      elseif (is_array($comment->files) && variable_get('comment_upload_single', 0)) {
+        // Simulate overwrite for preview
+        foreach ($comment->files as $file) {
+          if (strpos($file['fid'], 'upload') !== false) {
+            unset($comment->files[0]);
+            break;
+          }
+        }
+      }
+      if ($comment->files) {
+        $comment->comment .= theme('comment_attachments', $comment->files);
+      }
+      break;
+  }
+}
+
+/**
+ * Hook into node type and upload settings forms.
+ */
+function comment_upload_form_alter($form_id, &$form) {
+  if ($form_id == 'node_type_form') {
+    $form['workflow']['comment_upload'] = array(
+      '#type' => 'radios',
+      '#title' => t('Attachments on comments'),
+      '#default_value' => variable_get('comment_upload_'. $form['#node_type']->type, 1),
+      '#options' => array(t('Disabled'), t('Enabled')), '#weight' => 20,
+    );
+  }
+  else if ($form_id == 'upload_admin_settings') {
+    $form['settings_general']['comment_upload_single'] = array(
+      '#type' => 'select',
+      '#title' => t('Attachments on comments'),
+      '#default_value' => variable_get('comment_upload_single', 0),
+      '#options' => array(t('Multiple'), t('Single')),
+      '#description' => t('Set whether to allow only one attachment per comment'),
+    );
+    $form['settings_general']['comment_upload_inline_image'] = array(
+      '#type' => 'select',
+      '#title' => t('Images on comments'),
+      '#default_value' => variable_get('comment_upload_inline_image', 0),
+      '#options' => array(t('Normal attachment'), t('Inline display')),
+      '#description' => t('Show uploaded image with comment or use a normal attachment link (single attachment mode only)'),
+    );
+  }
+}
+
+function comment_upload_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array(
+      'path' => 'comment_upload/js',
+      'callback' => 'comment_upload_js',
+      'access' => user_access('upload files'),
+      'type' => MENU_CALLBACK
+    );
+  }
+  return $items;
+}
+
+/**
+ * Menu-callback for JavaScript-based uploads.
+ */
+function comment_upload_js() {
+  // We only do the upload.module part of the node validation process.
+  $comment = (object)$_POST;
+
+  // Load existing files.
+  $comment->files = _comment_upload_load_files($comment->cid);
+
+  // Handle new uploads, and merge tmp files into node-files.
+  _upload_prepare($comment);
+  _upload_validate($comment);
+
+  $form = _upload_form($comment);
+
+  // Swap upload/js for the comment_upload callback.
+  $form['attach-url']['#value'] = url('comment_upload/js', NULL, NULL, TRUE);
+
+  foreach (module_implements('form_alter') as $module) {
+    $function = $module .'_form_alter';
+    $function('upload_js', $form);
+  }
+  $form = form_builder('upload_js', $form);
+  $output = theme('status_messages') . drupal_render($form);
+
+  // We send the updated file attachments form.
+  print drupal_to_js(array('status' => TRUE, 'data' => $output));
+  exit;
+}
+
+/**
+ * Load files belonging to the comment $cid.
+ *
+ * When the optional argument $nid is provided all files belonging to
+ * comments on that nid are loaded at once and later served from memory.
+ * This reduces the amount of queries on node/nid pages.
+ *
+ * @return Array of file objects.
+ */
+function _comment_upload_load_files($cid, $nid = NULL) {
+  static $cache = array();
+  if ($nid) {
+    // Cache all for this node to avoid one query per comment
+    if (!isset($cache[$nid])) {
+      $cache[$nid] = array();
+      $result = db_query('SELECT * FROM {comment_upload_files} f WHERE f.nid = %d ORDER BY f.fid DESC', $nid);
+      while ($file = db_fetch_object($result)) {
+        $cache[$nid][$file->cid][] = $file;
+      }
+    }
+    return $cache[$nid][$cid];
+  }
+  else if ($cid) {
+    $result = db_query('SELECT * FROM {comment_upload_files} f WHERE f.cid = %d ORDER BY f.fid DESC', $cid);
+    while ($file = db_fetch_object($result)) {
+      $files[] = $file;
+    }
+    return $files;
+  }
+}
+
+function _comment_upload_save_files($comment) {
+  if (!is_array($comment['files'])) {
+    return;
+  }
+
+  foreach ($comment['files'] as $file) {
+    $file = (object)$file;
+
+    // Remove file. Process removals first since no further processing will be required.
+    if ($file->remove) {
+      // Remove file previews...
+      if (strpos($file->fid, 'upload') !== false) {
+        file_delete($file->filepath);
+      }
+
+      // Remove managed files.
+      else {
+        file_delete($file->filepath);
+        db_query('DELETE FROM {comment_upload_files} WHERE fid = %d', $file->fid);
+      }
+    }
+
+    // New file upload
+    elseif (strpos($file->fid, 'upload') !== false) {
+      if ($file = file_save_upload($file, $file->filename)) {
+        // Overwrite existing in single-attachment mode
+        if (variable_get('comment_upload_single', 0) && isset($comment['files'][0])) {
+          db_query("UPDATE {comment_upload_files} SET filename = '%s', filepath = '%s', filemime = '%s', filesize = %d WHERE fid = %d", $file->filename, $file->filepath, $file->filemime, $file->filesize, $comment['files'][0]['fid']);
+        }
+        else {
+          $file->fid = db_next_id('{comment_upload_files}_fid');
+          db_query("INSERT INTO {comment_upload_files} (fid, nid, cid, filename, filepath, filemime, filesize, description, list) VALUES (%d, %d, %d, '%s', '%s', '%s', %d, '%s', %d)", $file->fid, $comment['nid'], $comment['cid'], $file->filename, $file->filepath, $file->filemime, $file->filesize, $file->description, $file->list);
+        }
+      }
+      unset($_SESSION['file_previews'][$fid]);
+    }
+
+    // Update existing description.
+    else {
+      db_query("UPDATE {comment_upload_files} SET list = %d, description = '%s' WHERE fid = %d", $file->list, $file->description, $file->fid);
+    }
+  }
+}
+
+/**
+ * Delete files associated with the comment $cid.
+ *
+ * @param $cid The comment id of the comment that is deleted.
+ */
+function _comment_upload_delete($cid) {
+  $files = _comment_upload_load_files($cid);
+  if (!empty($files)) {
+    foreach ($files as $file) {
+      file_delete($file->filepath);
+      db_query('DELETE FROM {comment_upload_files} WHERE fid = %d', $file->fid);
+    }
+  }
+}
+
+/**
+ * Delete files and records associated with comments on the deleted node.
+ *
+ * Implementation of hook_nodeapi.
+ */
+function comment_upload_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  if ($op == 'delete') {
+    $result = db_query("SELECT * FROM {comment_upload_files} WHERE nid = %d", $node->nid);
+    while ($file = db_fetch_object($result)) {
+        file_delete($file->filepath);
+    }
+    // Delete all comments
+    db_query("DELETE FROM {comment_upload_files} WHERE nid = %d", $node->nid);
+  }
+}
+
+/**
+ * Style the attachment display.
+ *
+ * Images are displayed inline when Inline display has been set.
+ * Any remaining files are styled by theme('upload_attachments').
+ *
+ * @param $files An array containing files objects ($comment->files structure).
+ *
+ * @return HTML representation of attachments.
+ */
+function theme_comment_attachments($files) {
+  // Display images.
+  if (variable_get('comment_upload_inline_image', 0)) {
+    $regex = '/\.('. ereg_replace(' +', '|', preg_quote('jpg jpeg gif png')) .')$/i';
+    foreach ($files as $key => $file) {
+      if ($file->list) {
+        if (preg_match($regex, $file->filename)) {
+          unset($files[$key]);
+          $href = check_url(strpos($file->fid, 'upload') === false ? file_create_url($file->filepath) : url(file_create_filename($file->filename, file_create_path())));
+          $html .= '<img src="'. $href .'" title="'. check_plain($file->description) . '"/>';
+        }
+      }
+    }
+  }
+  // Style the remaining files as an attachment table.
+  $html .= theme('upload_attachments', $files);
+  return $html;
+}
+
+/**
+ * Enable downloads via private downloads setting.
+ *
+ * Users must be able to view the parent node and have the 'view uploaded files'
+ * permission. Implementation of hook_file_download.
+ *
+ */
+function comment_upload_file_download($file) {
+  $file = file_create_path($file);
+  $result = db_query("SELECT f.* FROM {comment_upload_files} f WHERE filepath = '%s'", $file);
+  if ($file = db_fetch_object($result)) {
+    if (user_access('view uploaded files')) {
+      $node = node_load($file->nid);
+      if (node_access('view', $node)) {
+        $name = mime_header_encode($file->filename);
+        $type = mime_header_encode($file->filemime);
+        return array(
+          'Content-Type: '. $type .'; name='. $name,
+          'Content-Length: '. $file->filesize,
+          'Expires: 0', 'Pragma: cache', 'Cache-Control: private',
+        );
+      }
+      else {
+        return -1;
+      }
+    }
+    else {
+      return -1;
+    }
+  }
+}
