@@ -385,7 +385,7 @@ function wikitools_node_validate($node) {
       }
       // It is only an error if the node which already exists is not the currently edited node.
       if ($nid && $nid != $node->nid) {
-        form_set_error('title', t('A <a href="@page_url">page</a> with this name already exists.', array('@page_url' => url("node/$nid"))));
+        form_set_error('title', t('[Wikitools] A <a href="@page_url">page</a> with this Title already exists.', array('@page_url' => url("node/$nid"))));
       }
     }
     // Check for disallowed characters in title.
