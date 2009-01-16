@@ -98,6 +98,7 @@ function quote_form_alter($form_id, &$form) {
       if (in_array($node->type, _quote_variable_get('node_types'))) {
         $quote = $node->body;
         $author = !empty($node->name) ? $node->name : variable_get('anonymous', 'Anonymous');
+        $subject = $node->title;
       }
       else {
         return;
@@ -107,6 +108,7 @@ function quote_form_alter($form_id, &$form) {
       return;
     }
     // Add quoted text and preserve existing content (signature etc.).
+    $form['subject']['#default_value'] = $subject;
     $form['comment_filter']['comment']['#default_value'] = '[quote='. $author .']'. $quote ."[/quote]\n". $form['comment_filter']['comment']['#default_value'];
     if (_quote_variable_get('subject_required')) {
       $form['subject']['#required'] = TRUE;
