@@ -5,8 +5,8 @@ dependencies = taxonomy comment
 package = Core - optional
 version = VERSION
 
-; Information added by drupal.org packaging script on 2008-12-10
-version = "5.13"
+; Information added by drupal.org packaging script on 2009-01-14
+version = "5.15"
 project = "drupal"
-datestamp = "1228947913"
+datestamp = "1231976415"
 
