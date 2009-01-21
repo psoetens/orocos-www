@@ -145,6 +145,12 @@ function pearwiki_filter_filter_settings($format) {
     '#default_value' => pearwiki_filter_ignore_tags($format),
     '#description' => t('Tags which are fully ignored (the tag, attributes and content is untouched). Use this for compatibility with other filters. Specify a space-separated list of tagnames.<br/>Example: If you specify <em>code</em> than the filter ignores &lt;code type="php"&gt; ... &lt;/code&gt; which can then be processed by other filters like the <a href="http://drupal.tschannen.net/wiki/geshi_filter">GeSHi filter</a>. This can introduce a security risk through XSS scripting. Make sure the ignored text will be processed by another filter.')
   );
+  $form['pearwiki_filter']['compatibility']['pearwiki_filter_ignore_tokens_'. $format] = array(
+    '#type' => 'textfield',
+    '#title' => t('Ignore tokens'),
+    '#default_value' => pearwiki_filter_ignore_tokens($format),
+    '#description' => t('Tokens which are fully ignored (the token, attributes and content is untouched). Use this for integration with other filters. Specify a space-separated list of tokens.<br />Example: If you specify <em>graphviz</em> then the filter ignores [graphviz] ... [/graphviz] or if you specify <em>video</em> then the filter ignores [video:http://some.url/video].')
+     );
   $form['pearwiki_filter']['compatibility']['pearwiki_filter_ignore_regexp_'.$format] = array(
     '#type' => 'textfield',
     '#title' => t('Ignore regexp'),
@@ -296,6 +302,16 @@ function pearwiki_filter_ignore_tags($format, $value = NULL) {
     return variable_get('pearwiki_filter_ignore_tags_'.$format, '');
   }
   variable_set('pearwiki_filter_ignore_tags_'.$format, $value);
+}
+
+/**
+ * Space-separated list of tokens which are ignored while rendering.
+ */
+function pearwiki_filter_ignore_tokens($format, $value = NULL) {
+  if (is_null($value)) {
+    return variable_get('pearwiki_filter_ignore_tokens_'. $format, '');
+  }
+  variable_set('pearwiki_filter_ignore_tokens_'. $format, $value);
 }
 
 /**
@@ -486,6 +502,9 @@ function pearwiki_filter_process ($text, $format) {
   }
   if (pearwiki_filter_ignore_tags($format)) {
     $wiki->insertRule('ignoretag', 'delimiter');
+  }
+  if (pearwiki_filter_ignore_tokens($format)) {
+    $wiki->insertRule('ignoretoken', 'delimiter');
   }
   if (!pearwiki_filter_use_wiki_links($format)) {
     $wiki->disableRule('wikilink');
