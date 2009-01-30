@@ -326,8 +326,8 @@ function listhandler_send_mail($edit) {
       $body = mail_html_to_text($edit['comment']);
     }
     else {
-      $subject = decode_entities(strip_tags($edit['subject']));
-      $body = decode_entities(strip_tags($edit['comment']));
+      $subject = decode_entities($edit['subject']);
+      $body = decode_entities($edit['comment']);
     }
 
     // Add attachments
