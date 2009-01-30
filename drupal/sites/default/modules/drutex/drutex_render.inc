@@ -85,21 +85,21 @@ function drutex_render_node2html() {
   /* Paragraph math between \[ and \] */
   $E[] = (object) array(
       'pattern' => '@\\\\\\[(.+?)\\\\\\]@se',
-      'replacement' => "drutex_render('$0', '<var>format</var>', '', 'tag=\"table\" class=\"displaymath\"')",
+      'replacement' => "drutex_render('$0', '<var>format</var>', '', 'tag=\"table\" class=\"displaymath\"','$0')",
       'weight' => -5
     );
 
   /* Inline math (display style) between $! and $ */
   $E[] = (object) array(
       'pattern' => '@(^|[^\\\\])\$!(.*?[^\\\\])\$@se',
-      'replacement' => "'$1' . drutex_render('$\displaystyle $2 $', '<var>format</var>')",
+      'replacement' => "'$1' . drutex_render('$\displaystyle $2 $', '<var>format</var>', '', '', '$!$2$')",
       'weight' => -4
     );
 
   /* Inline math between $ and $ */
   $E[] = (object) array(
       'pattern' => '@(^|[^\\\\])\$(.*?[^\\\\])\$@se',
-      'replacement' => "'$1' . drutex_render('$ $2 $', '<var>format</var>')",
+      'replacement' => "'$1' . drutex_render('$ $2 $', '<var>format</var>', '', '', '$$2$')",
       'weight' => -3
     );
 
@@ -188,9 +188,11 @@ function drutex_render_filter_settings($format = -1) {
 /**
  * Renders $text in LaTeX.
  */
-function drutex_render($text, $format = -1, $attributes = '', $default_attributes = '') {
+function drutex_render($text, $format = -1, $attributes = '', $default_attributes = '', $orig = '') {
 
   $text = _drutex_unescape($text);
+  if ( $orig == '' )
+      $orig=$text;
 
   if (drutex_submodule_is_active('security', $format)) {
     if (drutex_security($text, $format) == false) {
@@ -290,7 +292,7 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
     $res = "<img class=\"teximage\" src=\"$img_url\" alt=\"$img_alt\" />";
   }
   else {
-    $res = '<em class="error">TeX Embedding failed!</em>';
+    $res = $orig;//<em class="error">TeX Embedding failed!</em>';
   }
 
   if (!empty($attributes['tag'])) {
