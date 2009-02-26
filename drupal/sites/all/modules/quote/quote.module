@@ -117,6 +117,10 @@ function quote_form_alter(&$form, &$form_state, $form_id) {
       return;
     }
 
+    // Add Re: to reply.
+    if ( stristr($subject,"Re:") == FALSE ) {
+        $subject = "Re: " . $subject;
+    }
     // Add quoted text and preserve existing content (signature etc.).
     $form['subject']['#default_value'] = $subject;
     $form['comment_filter']['comment']['#default_value'] = '[quote='. $author .']'. trim($quote) ."[/quote]\n". $form['comment_filter']['comment']['#default_value'];
