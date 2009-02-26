@@ -75,6 +75,8 @@ DirectoryIndex index.php
 # Do not rewrite documents in /doc/ subdirs, as they are drupal
 # nodes !
     RewriteCond %{REQUEST_URI} !.+/doc/.+
+    RewriteCond %{REQUEST_URI} !.+/v1.6.x/.+
+    RewriteCond %{REQUEST_URI} !.+/v1.8.x/.+
 #RewriteRule   ^(stable/.+/doc/.+)  http://www.orocos.org/$1 [R,L]
 # Only match physical .html pages here:
 RewriteRule   ^(stable.+)    http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
