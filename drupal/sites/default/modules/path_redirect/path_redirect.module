@@ -1,0 +1,618 @@
+<?php
+// $Id: path_redirect.module,v 1.3.2.35 2008/05/14 00:55:33 horsepunchkid Exp $
+
+// The default HTTP status code for redirects is "moved permanently"
+define('PATH_REDIRECT_DEFAULT_TYPE', 301);
+
+if (module_exists('workflow_ng')) {
+  include_once(drupal_get_path('module', 'path_redirect') .'/path_redirect_workflow.inc');
+}
+
+/**
+ * Implementation of hook_help
+ */
+function path_redirect_help($path) {
+  switch ($path) {
+    case 'admin/build/path-redirect':
+      return '<p>'. t('Here you can set up URL redirecting for this site. Any existing or non-existing path within this site can redirect to any internal or external URL.') .'</p>';
+    case 'admin/build/path-redirect/'. arg(2):
+    case 'admin/build/path-redirect/edit/'. arg(3):
+      return '<p>'. t("The <strong>from</strong> path must be an internal Drupal path in the form of 'node/123', 'admin/logs', or 'taxonomy/term/123'. The <strong>to</strong> path can be either an internal Drupal path as above or a complete external URL such as http://www.example.com/. Furthermore, the <strong>to</strong> path may contain query arguments (such as 'page=2') and fragment anchors, to make it possible to redirect to 'admin/user?page=1#help'. Most redirects will not contain queries or anchors.") .'</p>';
+  }
+}
+
+/**
+ * Implementation of hook_init
+ *
+ * Early checking of URL requested.
+ * If a match is found, user is redirected using drupal_goto()
+ */
+function path_redirect_init() {
+  // Extract the Drupal path and query string from the request URI
+  $path = substr(request_uri(), strlen($GLOBALS['base_path']));
+  if (preg_match('/^\?q=/', $path)) {
+    $path = preg_replace(array('/^\?q=/', '/&/'), array('', '?'), $path, 1);
+  }
+  $r = db_fetch_object(db_query("SELECT rid, redirect, query, fragment, type FROM {path_redirect} WHERE path = '%s' OR path = '%s'", $path, urlencode(utf8_encode($path))));
+
+  // If there is no match against path and query string, check just the path
+  if (!$r) {
+    $path = preg_replace('/\?.*/', '', $path);
+    $r = db_fetch_object(db_query("SELECT rid, redirect, query, fragment, type FROM {path_redirect} WHERE path = '%s' OR path = '%s'", $path, urlencode(utf8_encode($path))));
+  }
+
+  // only redirect if allow_bypass is off or bypass is not requested
+  if ($r && !(variable_get('path_redirect_allow_bypass', 0) && !empty($_GET['redirect']) && $_GET['redirect'] == 'no') && url($r->redirect) != url($path)) {
+    if (variable_get('path_redirect_redirect_warning', 0)) {
+      drupal_set_message(t('This page has been moved. You may want to update your bookmarks.'));
+    }
+    if (function_exists('drupal_goto')) {
+      // if there's a result found, do the redirect
+      unset($_REQUEST['destination']);
+      drupal_goto($r->redirect, ($r->query ? $r->query: NULL), ($r->fragment ? $r->fragment : NULL), $r->type);
+    }
+    else {
+      // page caching is turned on so drupal_goto() (common.inc) hasn't been loaded
+      path_redirect_goto($r->redirect, ($r->query ? $r->query: NULL), ($r->fragment ? $r->fragment : NULL), $r->type);
+    }
+  }
+  else if ($r && url($r->redirect) == url($path)) {
+    watchdog('path_redirect', t('Redirect to <code>%redirect</code> is causing an infinite loop; redirect cancelled.', array('%redirect' => $r->redirect)), WATCHDOG_WARNING, l(t('edit'), 'admin/build/path-redirect/edit/'. $r->rid));
+  }
+  else if ($r && variable_get('path_redirect_allow_bypass', 0) && !empty($_GET['redirect']) && $_GET['redirect'] === 'no') {
+    drupal_set_message(t('This page is redirected to:') .' <code>'. l($r->redirect, $r->redirect, NULL, ($r->query ? $r->query: NULL), ($r->fragment ? $r->fragment : NULL)) .'</code>');
+  }
+}
+
+/**
+ * Implementation of hook_menu
+ */
+function path_redirect_menu($may_cache) {
+  $access = user_access('administer redirects');
+  $items = array();
+  if ($may_cache) {
+    $items[] = array(
+      'path' => 'admin/build/path-redirect',
+      'title' => t('URL redirects'),
+      'description' => t('Redirect users from one URL to another'),
+      'callback' => 'path_redirect_admin',
+      'access' => $access,
+    );
+    $items[] = array(
+      'path' => 'admin/build/path-redirect/list',
+      'title' => t('List'),
+      'description' => t('List all URL redirects'),
+      'access' => $access,
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => -3,
+    );
+    $items[] = array(
+      'path' => 'admin/build/path-redirect/add',
+      'title' => t('Add redirect'),
+      'description' => t('Add a new URL redirect'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('path_redirect_edit'),
+      'access' => $access,
+      'type' => MENU_LOCAL_TASK,
+    );
+    $items[] = array(
+      'path' => 'admin/build/path-redirect/edit',
+      'title' => t('Edit'),
+      'description' => t('Edit an existing URL redirect'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('path_redirect_edit'),
+      'access' => $access,
+      'type' => MENU_CALLBACK,
+    );
+    $items[] = array(
+      'path' => 'admin/build/path-redirect/delete',
+      'title' => t('Delete'),
+      'description' => t('Delete an existing URL redirect'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => array('path_redirect_delete_confirm'),
+      'access' => $access,
+      'type' => MENU_CALLBACK,
+    );
+    $items[] = array(
+      'path' => 'admin/settings/path-redirect',
+      'title' => t('URL redirects'),
+      'description' => t('Configure behavior for URL redirects'),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => 'path_redirect_settings',
+      'access' => $access,
+    );
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_perm
+ */
+function path_redirect_perm() {
+  return array('administer redirects');
+}
+
+/**
+ * Render a list of redirects for the main admin page.
+ */
+function path_redirect_admin($rid = FALSE) {
+  $header = array(
+    array('data' => t('From'), 'field' => 'path', 'sort' => 'asc'),
+    array('data' => t('To'), 'field' => 'redirect'),
+    array('data' => t('Type'), 'field' => 'type'),
+    array('data' => t('Operations'), 'colspan' => '3')
+  );
+
+  $result = pager_query('SELECT rid, path, redirect, query, fragment, type FROM {path_redirect}'. tablesort_sql($header), 50);
+  $count = db_num_rows($result);
+  $types = path_redirect_status_codes();
+  while ($r = db_fetch_object($result)) {
+    $path = $r->path;
+    $redirect = $r->redirect;
+    $query = $r->query ? "?$r->query" : '';
+    $fragment = $r->fragment ? "#$r->fragment" : '';
+    $rows[] = array(
+      htmlspecialchars(urldecode($path)),
+      htmlspecialchars($redirect . $query . $fragment),
+      $types[$r->type]['title'],
+      array('data' => l(t('test'), preg_replace('/\?.*/', '', urldecode($path)), NULL, strstr($path, '?') ? preg_replace('/.*\?/', '', $path) : NULL)),
+      array('data' => l(t('edit'), 'admin/build/path-redirect/edit/'. $r->rid)),
+      array('data' => l(t('delete'), 'admin/build/path-redirect/delete/'. $r->rid)),
+    );
+  }
+
+  if (!$count) {
+    $rows[] = array(array('data' => t('No redirects have been defined.'), 'colspan' => '6'));
+  }
+
+  $output = theme('table', $header, $rows, array('class' => 'path-redirects'));
+  $output .= '<p>'. l(t('Add new redirect'), 'admin/build/path-redirect/add') .'</p>';
+  $output .= theme('pager');
+
+  return $output;
+}
+
+/**
+ * Callback for add and edit pages.
+ *
+ * @return
+ *   A form for drupal_get_form.
+ */
+function path_redirect_edit($rid = FALSE) {
+  if ($rid) {
+    $redirect = path_redirect_load($rid);
+    drupal_set_title(check_plain($redirect['path']));
+    $output = path_redirect_edit_form($redirect);
+  }
+  else {
+    $breadcrumbs = drupal_get_breadcrumb();
+    array_push($breadcrumbs, l(t('URL redirects'), 'admin/build/path-redirect'));
+    drupal_set_breadcrumb($breadcrumbs);
+    drupal_set_title(t('Add redirect'));
+    $output = path_redirect_edit_form();
+  }
+  return $output;
+}
+
+function path_redirect_edit_form($edit = array('path' => '', 'redirect' => '', 'query' => '', 'fragment' => '', 'type' => PATH_REDIRECT_DEFAULT_TYPE, 'rid' => NULL)) {
+  $form['path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('From'),
+    '#description' => t('Enter a Drupal path or path alias to redirect. Fragment anchors <em>#foo</em> are <strong>not</strong> allowed.'),
+    '#size' => 42,
+    '#maxlength' => 255,
+    '#default_value' => $edit['path'],
+    '#field_prefix' => url(NULL, NULL, NULL, TRUE) . (variable_get('clean_url', 0) ? '' : '?q='),
+  );
+
+  $form['redirect'] = array(
+    '#type' => 'item',
+    '#prefix' => '<div class="container-inline">',
+    '#suffix' => '</div>',
+    '#title' => t('To'),
+    '#description' => '<div style="display:block">'. t('Enter a Drupal path, path alias, or external URL to redirect to. Use %front to redirect to the front page. Enter (optional) queries after "?" and (optional) anchor after "#". Most redirects will not contain queries or fragment anchors.', array('%front' => '<front>')) .'</div>',
+  );
+
+  $form['redirect']['redirect'] = array(
+    '#type' => 'textfield',
+    '#size' => 30,
+    '#maxlength' => 255,
+    '#default_value' => $edit['redirect'],
+  );
+
+  $form['redirect'][] = array(
+    '#value' => '?',
+  );
+
+  $form['redirect']['query'] = array(
+    '#type' => 'textfield',
+    '#size' => 12,
+    '#maxlength' => 255,
+    '#default_value' => $edit['query'],
+  );
+
+  $form['redirect'][] = array(
+    '#value' => '#',
+  );
+
+  $form['redirect']['fragment'] = array(
+    '#type' => 'textfield',
+    '#size' => 12,
+    '#maxlength' => 50,
+    '#default_value' => $edit['fragment'],
+  );
+
+  $form[] = array(
+    '#value' => "<p> </p>", // little bit of extra space
+  );
+
+  $form['type'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Redirect Type'),
+    '#collapsible' => TRUE,
+    '#collapsed' => ($edit['type'] == PATH_REDIRECT_DEFAULT_TYPE),
+  );
+
+  foreach (path_redirect_status_codes() as $key => $info) {
+    $form['type'][]['type'] = array(
+      '#type' => 'radio',
+      '#title' => $info['title'],
+      '#description' => $info['description'],
+      '#return_value' => $key,
+      '#default_value' => $edit['type'],
+    );
+  }
+  $form['type']['link'] = array(
+    '#type' => 'markup',
+    '#value' => t('<p>Find more information about http redirect codes <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3">here</a>.</p>'),
+  );
+
+  $form['rid'] = array(
+    '#type' => 'hidden',
+    '#value' => $edit['rid'],
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => $edit['rid'] ? t('Update redirect') : t('Create new redirect'),
+  );
+
+  return $form;
+}
+
+function path_redirect_edit_validate($form_id, &$form_values, $form) {
+  // Allow spaces in "from" path; encode everything but the query string
+  $form_values['path'] = urlencode(preg_replace('/\?.*/', '', $form_values['path']))
+    . (strstr($form_values['path'], '?') ? preg_replace('/.*(\?)/', '$1', $form_values['path']) : '');
+  form_set_value($form['path'], $form_values['path']);
+
+  if (trim($form_values['path']) == '') {
+    form_set_error('path', t('You must enter a <strong>from</strong> path.'));
+  }
+  else {
+    $path_error = '';
+
+    // The "from" path should not conflict with another redirect
+    $result = path_redirect_load(NULL, $form_values['path']);
+    if ($result && (!$form_values['rid'] || ($form_values['rid'] !== $result['rid']))) {
+      $path_error .= ' '. t('The <strong>from</strong> path you entered is already redirected. You can <a href="@edit-page">edit this redirect</a> instead.', array('@edit-page' => url('admin/build/path-redirect/edit/'. $result['rid'])));
+    }
+    // Check that the "from" path is valid and contains no # fragment
+    if (strstr($form_values['path'], '#')) {
+      $path_error .= ' '. t('You cannot redirect from a fragment anchor.');
+    }
+    // Make sure "from" has the form of a local Drupal path
+    if (!valid_url($form_values['path'])) {
+      $path_error .= ' '. t('The redirect <strong>from</strong> path does not appear valid. This must be a local Drupal path.');
+    }
+
+    if (!empty($path_error)) {
+      form_set_error('path', $path_error);
+    }
+  }
+
+  if (!valid_url($form_values['redirect']) && !valid_url($form_values['redirect'], TRUE) && $form_values['redirect'] != '<front>') {
+    form_set_error('redirect', t('The redirect <strong>to</strong> path does not appear valid.'));
+  }
+
+  if ($form_values['redirect'] == '<front>') {
+    $form_values['redirect'] = variable_get('site_frontpage', 'node');
+  }
+
+  // check that there there are no redirect loops
+  if ($form_values['path'] === $form_values['redirect']) {
+    form_set_error('redirect', t('You are attempting to redirect the page to itself. This will result in an infinite loop.'));
+  }
+}
+
+function path_redirect_edit_submit($form_id, &$form_values) {
+  path_redirect_save($form_values);
+  drupal_set_message(t('Redirect has been saved.'));
+  drupal_goto('admin/build/path-redirect');
+}
+
+function path_redirect_save($edit) {
+  if (empty($edit['rid'])) {
+    $edit['rid'] = db_next_id('{path_redirect}_rid');
+  }
+  else {
+    path_redirect_delete(NULL, NULL, $edit['rid']);
+  }
+
+  if (empty($edit['type'])) {
+    $edit['type'] = PATH_REDIRECT_DEFAULT_TYPE;
+  }
+  if (empty($edit['query'])) {
+    $edit['query'] = '';
+  }
+  if (empty($edit['fragment'])) {
+    $edit['fragment'] = '';
+  }
+
+  // Remove any other redirects from the same path
+  db_query("DELETE FROM {path_redirect} WHERE path = '%s'", $edit['path']);
+
+  return db_query("INSERT INTO {path_redirect} (rid, path, redirect, query, fragment, type) VALUES (%d, '%s', '%s', '%s', '%s', '%s')", $edit['rid'], $edit['path'], $edit['redirect'], $edit['query'], $edit['fragment'], $edit['type']);
+}
+
+/**
+ * Retrieve the specified URL redirect
+ */
+function path_redirect_load($rid = NULL, $from = NULL) {
+  if (!empty($rid)) {
+    $result = db_fetch_array(db_query("SELECT rid, path, redirect, query, fragment, type FROM {path_redirect} WHERE rid = %d", $rid));
+  }
+  else if (!empty($from)) {
+    $result = db_fetch_array(db_query("SELECT rid, path, redirect, query, fragment, type FROM {path_redirect} WHERE path = '%s'", $from));
+  }
+
+  if ($result) {
+    $result['path'] = urldecode($result['path']);
+  }
+  return $result;
+}
+
+/**
+ * Delete the specified path redirect. This will delete as specifically as
+ * possible, in order: by $rid, by ($from, $to), by $from, or by $to.
+ * Multiple redirects may be deleted if the $to parameter matches more than
+ * one entry.
+ *
+ * This function is part of an API available for external code to use.
+ *
+ * @param $from
+ *   Source path of redirect to delete.
+ * @param $to
+ *   Destination path or URL of redirect to delete.
+ * @param $rid
+ *   Unique ID of redirect to delete.
+ * @return
+ *   The result of the deletion query.
+ */
+function path_redirect_delete($from = NULL, $to = NULL, $rid = NULL) {
+  if (!empty($rid)) {
+    $result = db_query("DELETE FROM {path_redirect} WHERE rid = %d", $rid);
+  }
+  else if (!empty($from)) {
+    if (!empty($to)) {
+      $result = db_query("DELETE FROM {path_redirect} WHERE path = '%s' AND redirect = '%s'", $from, $to);
+    }
+    else {
+      $result = db_query("DELETE FROM {path_redirect} WHERE path = '%s'", $from);
+    }
+  }
+  else if (!empty($to)) {
+    $result = db_query("DELETE FROM {path_redirect} WHERE redirect = '%s'", $to);
+  }
+  return $result;
+}
+
+function path_redirect_delete_confirm($rid) {
+  $form['rid'] = array(
+    '#type' => 'value',
+    '#value' => $rid,
+  );
+  $redirect = path_redirect_load($rid);
+  return confirm_form($form,
+    t('Are you sure you want to delete the redirect from %path to %redirect?', array('%path' => $redirect['path'], '%redirect' => $redirect['redirect'])),
+    isset($_GET['destination']) ? $_GET['destination'] : 'admin/build/path-redirect');
+}
+
+function path_redirect_delete_confirm_submit($form_id, $form_values) {
+  if ($form_values['confirm']) {
+    path_redirect_delete(NULL, NULL, $form_values['rid']);
+    drupal_set_message(t('The redirect has been deleted.'));
+    return 'admin/build/path-redirect';
+  }
+}
+
+function path_redirect_settings() {
+  $form['path_redirect_nodeapi_enabled'] = array(
+    '#type' => 'radios',
+    '#title' => t('Enable on edit pages'),
+    '#default_value' => variable_get('path_redirect_nodeapi_enabled', 0),
+    '#options' => array(t('Disabled'), t('Enabled')),
+    '#description' => t('Enable management of URL redirects directly on content editing pages.'),
+  );
+
+  $form['path_redirect_redirect_warning'] = array(
+    '#type' => 'radios',
+    '#title' => t('Warn on redirect'),
+    '#default_value' => variable_get('path_redirect_redirect_warning', 0),
+    '#options' => array(t('Disabled'), t('Enabled')),
+    '#description' => t('Display a warning message to users when a redirect takes place.'),
+  );
+
+  $form['path_redirect_allow_bypass'] = array(
+    '#type' => 'radios',
+    '#title' => t('Allow bypassing'),
+    '#default_value' => variable_get('path_redirect_allow_bypass', 0),
+    '#options' => array(t('Disabled'), t('Enabled')),
+    '#description' => t('Allow users to bypass redirects by appending <code>?redirect=no</code> to the URL.'),
+  );
+
+  return system_settings_form($form);
+}
+
+function path_redirect_form_alter($form_id, &$form) {
+  if (variable_get('path_redirect_nodeapi_enabled', 0) && isset($form['#id']) && $form['#id'] == 'node-form' && user_access('administer redirects')) {
+    $form['redirects'] = array(
+      '#type' => 'fieldset',
+      '#access' => user_access('administer redirects'),
+      '#title' => t('URL redirects'),
+      '#collapsible' => TRUE,
+      '#collapsed' => !db_num_rows(path_redirect_node_redirects($form['#node']->nid)),
+      '#prefix' => '<div class="path-redirects">',
+      '#suffix' => '</div>',
+      '#weight' => 31,
+    );
+    $form['redirects']['list'] = _path_redirect_node_form_list($form['#node']);
+    $form['redirects']['path_redirect_add'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Add a redirect from'),
+      '#description' => t('Path from which to redirect to this node. Do not include the leading slash.'),
+      '#maxlength' => 255,
+      '#size' => 42,
+    );
+  }
+}
+
+function path_redirect_node_redirects($nid) {
+  return db_query("
+    SELECT rid, path, redirect, type
+    FROM {path_redirect} pr LEFT JOIN {url_alias} ua ON pr.redirect = ua.dst
+    WHERE pr.redirect = 'node/%d' OR ua.src = 'node/%d'
+    ORDER BY pr.path", $nid, $nid);
+}
+
+function _path_redirect_node_form_list($node) {
+  $form['#theme'] = 'path_redirect_node_form_list';
+  if (!empty($node->nid)) {
+    $result = path_redirect_node_redirects($node->nid);
+    if ($result) {
+      $destination = drupal_get_destination();
+      $types = path_redirect_status_codes();
+      while ($redirect = db_fetch_object($result)) {
+        $form['redirects'][$redirect->rid]['path'] = array(
+          '#value' => htmlspecialchars(urldecode($redirect->path)),
+        );
+        $form['redirects'][$redirect->rid]['redirect'] = array(
+          '#value' => $redirect->redirect,
+        );
+        $form['redirects'][$redirect->rid]['type'] = array(
+          '#value' => '<span title="'. $types[$redirect->type]['title'] .'">'. $redirect->type .'</span>',
+        );
+        $form['redirects'][$redirect->rid]['test'] = array(
+          '#value' => l(t('test'), preg_replace('/\?.*/', '', urldecode($redirect->path)), NULL, strstr($redirect->path, '?') ? preg_replace('/.*\?/', '', $redirect->path) : NULL),
+        );
+        $form['redirects'][$redirect->rid]['edit'] = array(
+          '#value' => l(t('edit'), 'admin/build/path-redirect/edit/'. $redirect->rid, array(), $destination),
+        );
+        $form['redirects'][$redirect->rid]['delete'] = array(
+          '#value' => l(t('delete'), 'admin/build/path-redirect/delete/'. $redirect->rid, array(), $destination),
+        );
+      }
+    }
+  }
+  return $form;
+}
+
+function theme_path_redirect_node_form_list(&$form) {
+  if (count(element_children($form['redirects']))) {
+    $header = array(
+      t('From'),
+      t('To'),
+      t('Type'),
+      array('data' => t('Operations'), 'colspan' => 3),
+    );
+    foreach (element_children($form['redirects']) as $key) {
+      $rows[] = array(
+        drupal_render($form['redirects'][$key]['path']),
+        drupal_render($form['redirects'][$key]['redirect']),
+        drupal_render($form['redirects'][$key]['type']),
+        drupal_render($form['redirects'][$key]['test']),
+        drupal_render($form['redirects'][$key]['edit']),
+        drupal_render($form['redirects'][$key]['delete']),
+      );
+    }
+    return theme('table', $header, $rows);
+  }
+}
+
+function path_redirect_nodeapi(&$node, $op, $arg) {
+  if (user_access('administer redirects')) {
+    switch ($op) {
+      case 'validate':
+        if (db_result(db_query("SELECT COUNT(rid) FROM {path_redirect} WHERE path = '%s' AND redirect != '%s' AND redirect != '%s'", $node->path_redirect_add, "node/$node->nid", $node->path))) {
+          form_set_error('path_redirect_add', t('The path is already redirected elsewhere.'));
+        }
+        break;
+      case 'load':
+        break;
+      case 'update':
+      case 'insert':
+        if ($node->path_redirect_add) {
+          path_redirect_save(array(
+            'path' => $node->path_redirect_add,
+            'redirect' => 'node/'. $node->nid,
+            'type' => 301,
+          ));
+        }
+        break;
+      case 'delete':
+        break;
+    }
+  }
+}
+
+/**
+ * This is a copy of drupal_goto() redesigned for use during the bootstrap
+ */
+function path_redirect_goto($path = '', $query = NULL, $fragment = NULL, $http_response_code = 302) {
+
+  $url = $path;
+
+  // Make the given path or URL absolute
+  if (!preg_match('/^[a-z]+:\/\//', $url)) {
+    global $base_url;
+    $url = $base_url .'/'. $url;
+  }
+
+  $url .= (empty($query)    ? '' : '?'. $query);
+  $url .= (empty($fragment) ? '' : '#'. $fragment);
+
+  // Remove newlines from the URL to avoid header injection attacks.
+  $url = str_replace(array("\n", "\r"), '', $url);
+
+  // Before the redirect, allow modules to react to the end of the page request.
+  bootstrap_invoke_all('exit');
+
+  // Even though session_write_close() is registered as a shutdown function, we
+  // need all session data written to the database before redirecting.
+  session_write_close();
+
+  header('Location: '. $url, TRUE, $http_response_code);
+
+  // The "Location" header sends a REDIRECT status code to the http
+  // daemon. In some cases this can go wrong, so we make sure none
+  // of the code below the drupal_goto() call gets executed when we redirect.
+  exit();
+}
+
+/**
+ * Return an array of 300-range status codes
+ * placed here for clarity
+ */
+function path_redirect_status_codes() {
+  $codes = array(
+    300 => array('title' => t('300 Multiple Choices'), 'description' => t('The request is ambiguous and needs clarification as to which resource was requested.')),
+    301 => array('title' => t('301 Moved Permanently'), 'description' => t('Moved Permanently. The resource has permanently moved elsewhere, the response indicates where it has gone to. <strong>Recommended.</strong>')),
+    302 => array('title' => t('302 Found'), 'description' => t('The resource has temporarily moved elsewhere, the response indicates where it is at present. <strong>This is Drupal\'s default redirect type.</strong>')),
+    303 => array('title' => t('303 See Other'), 'description' => t('See Other/Redirect. A preferred alternative source should be used at present.')),
+    304 => array('title' => t('304 Not Modified'), 'description' => t('The server has identified from the request information that the client\'s copy of the information is up-to-date and the requested information does not need to be sent again.')),
+    305 => array('title' => t('305 Use Proxy'), 'description' => t('The request must be sent through the indicated proxy server.')),
+    307 => array('title' => t('307 Temporary Redirect'), 'description' => t('The resource has temporarily moved elsewhere, the response indicates where it is at present. Client should still use this URL.')),
+  );
+
+  return $codes;
+}
