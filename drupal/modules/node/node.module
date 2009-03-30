@@ -20,6 +20,7 @@ define('NODE_BUILD_SEARCH_INDEX', 2);
 define('NODE_BUILD_SEARCH_RESULT', 3);
 define('NODE_BUILD_RSS', 4);
 define('NODE_BUILD_PRINT', 5);
+define('CLICK_BELOW_FOR_REST', ' <em>Click below to read the rest of this post.</em>');
 
 /**
  * Implementation of hook_help().
@@ -364,11 +365,14 @@ function node_teaser($body, $format = NULL, $size = NULL) {
 
   // If no complete paragraph then treat line breaks as paragraphs.
   $line_breaks = array('<br />' => 6, '<br>' => 4);
+
+  // Edit by PS: do not take into account line breaks
   // Newline only indicates a line break if line break converter
   // filter is present.
-  if (isset($filters['filter/1'])) {
-    $line_breaks["\n"] = 1;
-  }
+  //if (isset($filters['filter/1'])) {
+  //  $line_breaks["\n"] = 1;
+  //}
+
   $break_points[] = $line_breaks;
 
   // If the first paragraph is too long, split at the end of a sentence.
@@ -388,12 +392,12 @@ function node_teaser($body, $format = NULL, $size = NULL) {
     // If a break point was found in this group, slice and return the teaser.
     if ($min_rpos !== $max_rpos) {
       // Don't slice with length 0.  Length must be <0 to slice from RHS.
-      return ($min_rpos === 0) ? $teaser : substr($teaser, 0, 0 - $min_rpos);
+        return (($min_rpos === 0) ? $teaser : substr($teaser, 0, 0 - $min_rpos)) . CLICK_BELOW_FOR_REST;
     }
   }
 
   // If a break point was not found, still return a teaser.
-  return $teaser;
+  return $teaser . '...' . CLICK_BELOW_FOR_REST;
 }
 
 /**
@@ -1371,7 +1375,7 @@ function node_link($type, $node = NULL, $teaser = FALSE) {
   if ($type == 'node') {
     if ($teaser == 1 && $node->teaser && !empty($node->readmore)) {
       $links['node_read_more'] = array(
-        'title' => t('Read more'),
+        'title' => t('See complete post...'),
         'href' => "node/$node->nid",
         // The title attribute gets escaped when the links are processed, so
         // there is no need to escape here.
