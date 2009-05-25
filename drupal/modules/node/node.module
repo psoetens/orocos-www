@@ -9,7 +9,7 @@
 
 define('NODE_NEW_LIMIT', time() - 30 * 24 * 60 * 60);
 
-define('CLICK_BELOW_FOR_REST', ' <em>Click below to read the rest of this post.</em>');
+define('CLICK_BELOW_FOR_REST', ' Click below to read the rest of this post.');
 
 /**
  * Implementation of hook_help().
