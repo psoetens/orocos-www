@@ -20,7 +20,7 @@ define('NODE_BUILD_SEARCH_INDEX', 2);
 define('NODE_BUILD_SEARCH_RESULT', 3);
 define('NODE_BUILD_RSS', 4);
 define('NODE_BUILD_PRINT', 5);
-define('CLICK_BELOW_FOR_REST', ' <em>Click below to read the rest of this post.</em>');
+define('CLICK_BELOW_FOR_REST', ' Click below to read the rest of this post.');
 
 /**
  * Implementation of hook_help().
