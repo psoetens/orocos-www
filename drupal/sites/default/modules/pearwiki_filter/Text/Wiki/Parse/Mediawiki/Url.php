@@ -169,7 +169,7 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
 
 
         //$tmp_regex = '/(^|[^A-Za-z])([a-zA-Z])(.*?)/';
-        $tmp_regex = '/(^|\s)([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)+)($|\s)/';
+        $tmp_regex = '/(^|\s)([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-]+(\.[a-zA-Z]+)+)($|\s)/';
         
         // use the standard callback for inline URLs
         $this->wiki->source = preg_replace_callback(
