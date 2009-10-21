@@ -1058,7 +1058,7 @@ function _filter_xss_split($m, $store = FALSE) {
 
   if (!preg_match('%^(?:<\s*(/\s*)?([a-zA-Z0-9]+)([^>]*)>?|(<!--.*?-->))$%', $string, $matches)) {
     // Seriously malformed
-    return '';
+    return _fix_breaks( str_replace('&', '&amp;', str_replace('>', '&gt;', str_replace('<', '&lt;', $string))) );
   }
 
   $slash = trim($matches[1]);
@@ -1070,9 +1070,11 @@ function _filter_xss_split($m, $store = FALSE) {
     $elem = '!--';
   }
 
+  $do_escape = false;
   if (!isset($allowed_html[strtolower($elem)])) {
     // Disallowed HTML element
-    return '';
+    // escape it.
+    $do_escape =  TRUE;
   }
 
   if ($comment) {
@@ -1080,7 +1082,11 @@ function _filter_xss_split($m, $store = FALSE) {
   }
 
   if ($slash != '') {
-    return "</$elem>";
+    if (!$do_escape) {
+      return "</$elem>";
+    } else {
+      return _fix_breaks("&lt;$elem$attrlist&gt;");
+    }
   }
 
   // Is there a closing XHTML slash at the end of the attributes?
@@ -1093,7 +1099,16 @@ function _filter_xss_split($m, $store = FALSE) {
   $attr2 = preg_replace('/[<>]/', '', $attr2);
   $attr2 = strlen($attr2) ? ' '. $attr2 : '';
 
-  return "<$elem$attr2$xhtml_slash>";
+  if (!$do_escape) {
+    return "<$elem$attr2$xhtml_slash>";
+  } else {
+    return _fix_breaks("&lt;$elem$attrlist$xhtml_slash&gt;");
+  }
+}
+
+function _fix_breaks($string)
+{
+  return str_replace('<br  /&gt;','<br />',str_replace('br /&gt;','</br>', str_replace('p&gt;','</p>', $string)));
 }
 
 /**
