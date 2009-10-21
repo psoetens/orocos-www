@@ -18,7 +18,7 @@ ErrorDocument 404 /index.php
 
 # Force simple error message for requests for non-existent favicon.ico.
 <Files favicon.ico>
-  ErrorDocument 404 "The requested file favicon.ico was not found.
+  ErrorDocument 404 "The requested file favicon.ico was not found."
 </Files>
 
 # Set the default handler.
@@ -75,8 +75,8 @@ DirectoryIndex index.php
 # Do not rewrite documents in /doc/ subdirs, as they are drupal
 # nodes !
     RewriteCond %{REQUEST_URI} !.+/doc/.+
-    RewriteCond %{REQUEST_URI} !.+/v1.6.x/.+
     RewriteCond %{REQUEST_URI} !.+/v1.8.x/.+
+    RewriteCond %{REQUEST_URI} !.+/v1.10.x/.+
 #RewriteRule   ^(stable/.+/doc/.+)  http://www.orocos.org/$1 [R,L]
 # Only match physical .html pages here:
 RewriteRule   ^(stable.+)    http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
