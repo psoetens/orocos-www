@@ -185,10 +185,10 @@ function _talk_node_comment_value(&$node) {
  *   boolean which indicates if the adding of comments is allowed for current user
  */
 function theme_talkpage($node, $add_comments) {
-  $output = '';
+  $output = 'This page collects all the comments/remarks users had about this article.';
   $output .= comment_render($node);
-  if ($node->comment_count && $add_comments) {
-    $output .= '<p>' . l(t('Add new comment'), "comment/reply/$node->nid") . '</p>';
+  if ( $add_comments) {
+    $output .= '<p>' . l(t('Discuss this article'), "comment/reply/$node->nid") . '</p>';
   }
   return $output;
 }
