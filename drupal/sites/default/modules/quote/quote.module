@@ -251,8 +251,23 @@ function _quote_filter_process($text) {
     $pre = '<div class="quote-msg"><div class="quote-author">';
     $post = '</div>';
     $markup = $pre . t('Quote:') . $post;
-    $text = str_replace(array('[quote]', '[quote=]', '[/quote]'), array($markup, $markup, $post), $text);
-    $text = preg_replace('#\[quote=(?:"|\')?(.*?)["\']?(?:"|\')?\]#s', $pre . t('%name wrote:', array('%name' => '\\1')) . $post, $text);
+    // this unconditional replacement causes big trouple in wrongly formatted quote tags:
+    //$text = str_replace(array('[quote]', '[quote=]', '[/quote]'), array($markup, $markup, $post), $text);
+    $count=0;
+    $count2=0;
+    $count3=0;
+    // we count the replacements of opening tags and allow as much closing tags (and add if missing !)
+    $text = str_replace(array('[quote]', '[quote=]'), array($markup, $markup), $text,  $count);
+    // replace with author
+    $text = preg_replace('#\[quote=(?:"|\')?(.*?)["\']?(?:"|\')?\]#s', $pre . t('%name wrote:', array('%name' => '\\1')) . $post, $text, -1, $count2);
+    // replace closing tags, count + count2 will always be equal or larger than count3 (See while loop).
+    $text = preg_replace('#\[/quote\]#s', $post, $text, $count + $count2, $count3);
+    //$text .=" * count= ".$count." count2= ".$count2." count3= ".$count3." * "; // debug code
+    // fix missing closes.
+    while ( $count + $count2 >= $count3) {
+      $text .= $post;
+      ++$count3;
+    }
   }
   return $text;
 }
