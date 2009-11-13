@@ -246,11 +246,28 @@ function _quote_get_node_types($keys = FALSE) {
  *   Filtered text.
  */
 function _quote_filter_process($text) {
+  // Thanks: function based on code from punbb.org
   if (stristr($text, '[quote')) {
-    // Single regexp with callback allowing for theme calls and quote
-    // nesting/recursion with regexp code from
-    // http://de.php.net/manual/en/function.preg-replace-callback.php#85836
-    $text = preg_replace_callback('#\[(quote.*?)]((?>\[(?!/?quote[^[]*?])|[^[]|(?R))*)\[/quote]#is', '_quote_filter_process_callback', $text);
+    $pre = '<div class="quote-msg"><div class="quote-author">';
+    $post = '</div>';
+    $markup = $pre . t('Quote:') . $post;
+    // this unconditional replacement causes big trouple in wrongly formatted quote tags:
+    //$text = str_replace(array('[quote]', '[quote=]', '[/quote]'), array($markup, $markup, $post), $text);
+    $count=0;
+    $count2=0;
+    $count3=0;
+    // we count the replacements of opening tags and allow as much closing tags (and add if missing !)
+    $text = str_replace(array('[quote]', '[quote=]'), array($markup, $markup), $text,  $count);
+    // replace with author
+    $text = preg_replace('#\[quote=(?:"|\')?(.*?)["\']?(?:"|\')?\]#s', $pre . t('%name wrote:', array('%name' => '\\1')) . $post, $text, -1, $count2);
+    // replace closing tags, count + count2 will always be equal or larger than count3 (See while loop).
+    $text = preg_replace('#\[/quote\]#s', $post, $text, $count + $count2, $count3);
+    //$text .=" * count= ".$count." count2= ".$count2." count3= ".$count3." * "; // debug code
+    // fix missing closes.
+    while ( $count + $count2 >= $count3) {
+      $text .= $post;
+      ++$count3;
+    }
   }
 
   return $text;
