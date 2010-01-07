@@ -1,9 +1,9 @@
-$Id: README.txt,v 1.13.2.1.2.8 2007/10/05 14:42:51 robloach Exp $
+$Id: README.txt,v 1.13.2.1.2.9 2007/12/12 22:08:29 soxofaan Exp $
 
 ### CAPTCHA Readme
 
 captcha.module is the basic CAPTCHA module that offers general CAPTCHA
-adminstration and a simple math challenge.
+administration and a simple math challenge.
 
 text_captcha offers another simple text based challenge.
 

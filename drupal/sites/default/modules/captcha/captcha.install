@@ -1,5 +1,10 @@
 <?php
-// $Id: captcha.install,v 1.1.4.6 2007/10/02 19:21:20 robloach Exp $
+// $Id: captcha.install,v 1.1.4.10 2009/01/04 16:12:22 soxofaan Exp $
+
+/**
+ * @file
+ * Installation file for the core CAPTCHA module.
+ */
 
 /**
  * Create tables on install
@@ -38,10 +43,12 @@ function captcha_install() {
     foreach ($form_ids as $form_id) {
       db_query("INSERT INTO {captcha_points} (form_id, module, type) VALUES ('%s', NULL, NULL)", $form_id);
     }
-    drupal_set_message(t('The installation of the captcha_points table and some default entries was successful'), 'status');
+    drupal_set_message(t('The installation of the captcha_points table and some default entries was successful.'), 'status');
+    drupal_set_message(t('You can now <a href="!captcha_admin">configure the CAPTCHA module</a> for your site.',
+      array('!captcha_admin' => url('admin/user/captcha'))), 'status');
   }
   else {
-    drupal_set_message(t('The installation of the CAPTCHA module failed'), 'error');
+    drupal_set_message(t('The installation of the CAPTCHA module failed.'), 'error');
   }
 }
 
@@ -99,6 +106,17 @@ function captcha_update_2() {
     $items[] = update_sql("INSERT INTO {captcha_points} (form_id, module, type) VALUES ('$form_id', NULL, NULL)");
   }
   return $items;
+}
+
+/**
+ * Implementation of hook_update_N()
+ */
+function captcha_update_3() {
+  // Clearing of the menu cache is needed because the internal menu structure
+  // of the CAPTCHA module changed a bit.
+  // Because update.php does menu cache clearing automatically,
+  // we just do nothing here except returning an empty array.
+  return array();
 }
 
 /**

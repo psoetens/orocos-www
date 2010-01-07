@@ -1,5 +1,10 @@
 <?php
-// $Id: image_captcha.install,v 1.1.2.1 2007/07/13 17:59:06 robloach Exp $
+// $Id: image_captcha.install,v 1.1.2.2 2008/06/09 11:06:50 soxofaan Exp $
+
+/**
+ * @file
+ * Installation file for the image CAPTCHA module.
+ */
 
 /**
  * On uninstall: remove module variables and clear variable cache

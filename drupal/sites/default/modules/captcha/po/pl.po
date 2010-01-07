@@ -37,7 +37,7 @@ msgid "<p>A CAPTCHA can be added to virtually each Drupal form. Some default for
 msgstr "<p>Pułapki łapirobota mogą być w praktyce dodane do wszystkich formularzy występujących w Drupalu. Niektóre z nich są już ujęte na liście formularzy, a inne można ręcznie dodać do listy, włączając uprzednio opcję \"%adminlinks\".</p><p>Użytkownikom z <a href=\"@perm\">uprawnieniami</a> do omijania pułapek nie zostaną one przedstawione. Pamiętaj, by nadać to uprawnienie zaufanym użytkownikom (np. administratorom witryny). Jeśli chcesz przetestować działanie łapirobota, nie rób tego z konta, które posiada takie uprawnienia.</p>"
 
 #: captcha.module:42;202;210
-msgid "Add CAPTCHA adminstration links to forms"
+msgid "Add CAPTCHA administration links to forms"
 msgstr "Dodaj do formularzy odnośniki umożliwiające zarządzanie łapirobotem."
 
 #: captcha.module:57;67;455;106;442;568
@@ -269,7 +269,7 @@ msgid "Spam control"
 msgstr "Walka ze spamem"
 
 #: image_captcha/image_captcha.module:20
-msgid "The image CAPTCHA is a popular challenge where a random textual code is obfuscated in an image. The image is generated on the fly for each request, which is rather CPU intensive for the server. Be carefull with the size and computation related settings."
+msgid "The image CAPTCHA is a popular challenge where a random textual code is obfuscated in an image. The image is generated on the fly for each request, which is rather CPU intensive for the server. Be careful with the size and computation related settings."
 msgstr "Pułapka graficzna jest popularnym rodzajem zadania, polegającym na przedstawieniu użytkownikowi kodu tekstowego zapisanego w obrazku, który poddany został zniekształceniu. Obrazek jest generowany \"w locie\" za każdym otwarciem strony, co jest dosyć wymagające dla procesora serwera. Do ustawień obrazka należy więc podchodzić ostrożnie."
 
 #: image_captcha/image_captcha.module:24
@@ -394,7 +394,7 @@ msgid "Smooth distortion"
 msgstr "Wygładzanie zniekształceń"
 
 #: image_captcha/image_captcha.module:182
-msgid "This option enables bilineair interpolation of the distortion which makes the image look smoother, but it is more CPU intensive."
+msgid "This option enables bilinear interpolation of the distortion which makes the image look smoother, but it is more CPU intensive."
 msgstr "Opcja umożliwia korzystanie z interpolacji dwuliniowej podczas zniekształcania obrazka, co sprawia że wygląda on bardziej \"gładko\". Technika ta jest jednak wymagająca dla procesora."
 
 #: image_captcha/image_captcha.module:187
@@ -402,11 +402,11 @@ msgid "Double vision"
 msgstr "Wzrok stereo"
 
 #: image_captcha/image_captcha.module:189
-msgid "When enabled, characters appear twice in the image, overlayed onto each other."
+msgid "When enabled, characters appear twice in the image, overlaid onto each other."
 msgstr "Znaki występują podwójnie, nakładając się na siebie."
 
 #: image_captcha/image_captcha.module:194
-msgid "Add salt and peper noise"
+msgid "Add salt and pepper noise"
 msgstr "Posyp solą i pieprzem"
 
 #: image_captcha/image_captcha.module:196
@@ -426,7 +426,7 @@ msgid "Noise level"
 msgstr "Poziom szumu"
 
 #: image_captcha/image_captcha.module:223
-msgid "The image captcha module works best with a TrueType font file (TTF) for generating the images, but because of licencing issues it is not allowed to package fonts with the module. A simple built-in bitmap font is provided as default instead. You can install TrueType fonts yourself by putting them in the fonts directory of the image captcha module (directory \"%fontsdir\") or by uploading them to your Drupal file system (directory \"%filesdir\") with for example the upload module."
+msgid "The image CAPTCHA module works best with a TrueType font file (TTF) for generating the images, but because of licencing issues it is not allowed to package fonts with the module. A simple built-in bitmap font is provided as default instead. You can install TrueType fonts yourself by putting them in the fonts directory of the image CAPTCHA module (directory \"%fontsdir\") or by uploading them to your Drupal file system (directory \"%filesdir\") with for example the upload module."
 msgstr "Graficzny łapirobot działa najlepiej wraz z czcionkami TrueType (pliki o rozszerzeniu TTF), jednak ze względu na ograniczenia licencyjne moduł nie jest dostarczany wraz z tymi czcionkami. W zamian do modułu dodawana jest czcionka bitmapowa. Możesz jednak na własną rękę zainstalować czcionki TrueType, umieszczając ich pliki w katalogu czcionek modułu (\"%fontsdir\"), lub wysyłając je do systemu plików Drupala (katalog \"%filesdir\")."
 
 #: image_captcha/image_captcha.module:226
@@ -561,4 +561,3 @@ msgstr "łapirobot tekstowy"
 #: text_captcha/text_captcha.info:0
 msgid "Provides a simple text based CAPTCHA."
 msgstr "Udostępnia tekstowe pułapki łapirobota."
-
