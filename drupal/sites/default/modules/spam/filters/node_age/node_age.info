@@ -1,0 +1,12 @@
+; $Id: node_age.info,v 1.1.2.1 2008/04/22 17:38:11 jeremy Exp $
+name = Spam node age filter
+description = A node-age comment filter plug-in for the spam module.
+package = Spam
+dependencies = spam comment
+
+
+; Information added by drupal.org packaging script on 2008-09-29
+version = "5.x-3.0-beta1"
+project = "spam"
+datestamp = "1222710636"
+

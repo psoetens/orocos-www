@@ -1,0 +1,56 @@
+<?php
+// $Id: duplicate.install,v 1.1.2.5 2008/09/29 16:16:32 jeremy Exp $
+
+function duplicate_install() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      /**
+       * Tracks a 32-bit hash and the IP for each piece of content.
+       */
+      db_query("CREATE TABLE {spam_duplicate} (
+        iid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        sid INT(11) UNSIGNED NOT NULL DEFAULT '0',
+        content_hash CHAR(32) NOT NULL DEFAULT '',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        duplicate_hash INT(11) NOT NULL DEFAULT '0',
+        duplicate_ip INT(11) NOT NULL DEFAULT '0',
+        spam TINYINT NOT NULL DEFAULT '0',
+        expired TINYINT NOT NULL DEFAULT '0',
+        timestamp INT(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY  (iid),
+        KEY  (sid),
+        KEY  (content_hash),
+        KEY  (hostname),
+        KEY  (spam),
+        KEY  (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+        break;
+
+    case 'pgsql':
+      db_query("CREATE TABLE {spam_duplicate} (
+        iid SERIAL,
+        sid int_unsigned NOT NULL DEFAULT 0,
+        content_hash CHAR(32) NOT NULL DEFAULT '',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        duplicate_hash INTEGER NOT NULL DEFAULT 0,
+        duplicate_ip INTEGER NOT NULL DEFAULT 0,
+        spam INTEGER NOT NULL DEFAULT 0,
+        expired INTEGER NOT NULL DEFAULT 0,
+        timestamp int_unsigned NOT NULL DEFAULT 0,
+        PRIMARY KEY (iid)
+      );");
+      db_query("CREATE INDEX {spam_duplicate}_sid_idx ON {spam_duplicate} (sid);");
+      db_query("CREATE INDEX {spam_duplicate}_content_hash_idx ON {spam_duplicate} (content_hash);");
+      db_query("CREATE INDEX {spam_duplicate}_hostname_idx ON {spam_duplicate} (hostname);");
+      db_query("CREATE INDEX {spam_duplicate}_spam_idx ON {spam_duplicate} (spam);");
+      db_query("CREATE INDEX {spam_duplicate}_timestamp_idx ON {spam_duplicate} (timestamp);");
+      break;
+  }
+}
+
+function duplicate_uninstall() {
+  db_query('DROP TABLE {spam_duplicate}');
+  drupal_set_message('The spam_duplicate table has been dropped.');
+}

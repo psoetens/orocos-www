@@ -1,0 +1,501 @@
+<?php
+// $Id: spam.install,v 1.1.2.1.2.9.2.21 2008/09/29 16:31:45 jeremy Exp $
+
+/**
+ *
+ */
+function spam_install() {
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      /**
+       * Provides global and granular per-content-type configurations for all
+       * enabled spam filters.  The status allows a filter to be enabled or
+       * disabled.  The weight allows filters to be ordered.  The gain allows
+       * you to minimize or amplify the effect of a given filter.
+       */
+      db_query("CREATE TABLE {spam_filters} (
+        fid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        gid INT(11) UNSIGNED DEFAULT '0' NOT NULL,
+        name VARCHAR(128) NOT NULL DEFAULT '',
+        module VARCHAR(128) NOT NULL DEFAULT '',
+        status TINYINT UNSIGNED DEFAULT '0' NOT NULL,
+        weight TINYINT DEFAULT '0' NOT NULL,
+        gain TINYINT UNSIGNED DEFAULT '0' NOT NULL,
+        PRIMARY KEY fid (fid),
+        KEY gid (gid),
+        KEY name (name),
+        KEY module (module),
+        KEY status (status),
+        KEY weight (weight)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      db_query("CREATE TABLE {spam_filters_groups} (
+        gid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL DEFAULT '',
+        weight TINYINT DEFAULT '0' NOT NULL,
+        PRIMARY KEY gid (gid),
+        KEY weight (weight)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      db_query("CREATE TABLE {spam_filters_groups_data} (
+        gid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        content_type VARCHAR(64) NOT NULL DEFAULT '',
+        PRIMARY KEY gid_content_type (gid,content_type),
+        KEY content_type (content_type)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Tracks all filtered site content, included both spam and non-spam.
+       */
+      db_query("CREATE TABLE {spam_tracker} (
+        sid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        content_type VARCHAR(128) NOT NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        score INT(4) UNSIGNED DEFAULT '0',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp INT(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY sid (sid),
+        UNIQUE KEY content_id_content_type (content_id,content_type),
+        KEY content_type (content_type),
+        KEY score (score),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       *
+       */
+      db_query("CREATE TABLE {spam_filters_errors} (
+        bid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        uid INT(11) UNSIGNED NOT NULL DEFAULT '0',
+        content_type VARCHAR(128) NOT NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        content_hash CHAR(32) NOT NULL DEFAULT '',
+        content TEXT NOT NULL,
+        form TEXT NOT NULL,
+        feedback TEXT NOT NULL,
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp INT(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY bid (bid),
+        KEY id_type (content_id,content_type),
+        UNIQUE KEY content_hash (content_hash),
+        KEY content_type (content_type),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Logging mechanism similar to watchdog, but provides additional 
+       * information specific to spam tracking.
+       */
+      db_query("CREATE TABLE {spam_log} (
+        lid int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        trid int(11) UNSIGNED NOT NULL DEFAULT '0',
+        level int(2) UNSIGNED NOT NULL DEFAULT '0',
+        content_type VARCHAR(128) NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        uid int(10) UNSIGNED NOT NULL DEFAULT '0',
+        function varchar(255) NOT NULL DEFAULT '',
+        message varchar(255) NOT NULL DEFAULT '',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp int(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY lid (lid),
+        KEY trid (trid),
+        KEY content_type_content_id (content_type, content_id),
+        KEY message (message),
+        KEY uid (uid),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Spam statistics.
+       */
+      db_query("CREATE TABLE {spam_statistics} (
+        stid int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name varchar(64) NOT NULL DEFAULT '',
+        count int(11) UNSIGNED NOT NULL DEFAULT '0',
+        timestamp int(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY stid (stid),
+        UNIQUE KEY name (name)
+      ) TYPE=MyISAM /* 40100 DEFAULT CHARACTER SET utf8 */;");
+      break;
+    case 'pgsql':
+      /**
+       * tinyint (above) has usually been implemented as integer,
+       * because of the following comment in pgsql docs:
+       * "The type integer is the usual choice, as it offers the best 
+       * balance between range, storage size, and performance.
+       * The smallint type is generally only used if disk space is at a premium.
+       */
+      db_query("CREATE TABLE {spam_filters} (
+	fid serial PRIMARY KEY,
+	gid integer NOT NULL default 0,
+	name varchar(128) NOT NULL default '',
+	module varchar(128) NOT NULL default '',
+	status integer NOT NULL default 0,
+	weight integer NOT NULL default 0,
+	gain integer NOT NULL default 0
+      );");
+      db_query("CREATE INDEX {spam_filters}_gid_key ON {spam_filters} (gid);");
+      db_query("CREATE INDEX {spam_filters}_name_key ON {spam_filters} (name);");
+      db_query("CREATE INDEX {spam_filters}_module_key ON {spam_filters} (module);");
+      db_query("CREATE INDEX {spam_filters}_status_key ON {spam_filters} (status);");
+      db_query("CREATE INDEX {spam_filters}_weight_key ON {spam_filters} (weight);");
+      db_query("CREATE TABLE {spam_filters_groups} (
+        gid serial PRIMARY KEY,
+	name varchar(255) NOT NULL default '',
+	weight integer NOT NULL default 0
+      );");
+      db_query("CREATE INDEX {spam_filters_groups}_weight_key ON {spam_filters_groups} (weight);");
+      db_query("CREATE TABLE {spam_filters_groups_data} (
+	gid serial,
+	content_type varchar(64) NOT NULL default '',
+	CONSTRAINT spam_filters_groups_data_pk PRIMARY KEY(gid,content_type)
+      );");
+      db_query("CREATE INDEX {spam_filters_groups_data}_content_type_key ON {spam_filters_groups_data} (content_type);");
+      /**
+       * Tracks all filtered site content, included both spam and non-spam.
+       */
+      db_query("CREATE TABLE {spam_tracker} (
+	sid serial PRIMARY KEY,
+	content_type varchar(128) NOT NULL default '',
+	content_id integer NOT NULL default 0,
+	score integer NOT NULL default 0,
+	hostname varchar(15) NOT NULL default '',
+	timestamp integer NOT NULL default 0,
+	CONSTRAINT spam_tracker_u UNIQUE(content_id,content_type)
+      );");
+      db_query("CREATE INDEX {spam_tracker}_u_key ON {spam_tracker} (content_id,content_type);");
+      db_query("CREATE INDEX {spam_tracker}_content_type_key ON {spam_tracker} (content_type);");
+      db_query("CREATE INDEX {spam_tracker}_score_key ON {spam_tracker} (score);");
+      db_query("CREATE INDEX {spam_tracker}_hostname_key ON {spam_tracker} (hostname);");
+      db_query("CREATE INDEX {spam_tracker}_timestamp_key ON {spam_tracker} (timestamp);");
+      /**
+       *
+       */
+      db_query("CREATE TABLE {spam_filters_errors} (
+	bid serial PRIMARY KEY,
+	content_type varchar(128) NOT NULL default '',
+	content_id integer NOT NULL default 0,
+	content_hash char(32) NOT NULL default '',
+        content text NOT NULL,
+        feedback text NOT NULL,
+	hostname varchar(15) NOT NULL default '',
+	timestamp integer NOT NULL default 0,
+	CONSTRAINT spam_filters_errors_u1 UNIQUE(content_id,content_type),
+	CONSTRAINT spam_filters_errors_u2 UNIQUE(content_hash)
+      );");
+      db_query("CREATE INDEX {spam_filters_errors}_content_type_key ON {spam_filters_errors} (content_type);");
+      db_query("CREATE INDEX {spam_filters_errors}_content_hash_key ON {spam_filters_errors} (content_hash);");
+      db_query("CREATE INDEX {spam_filters_errors}_hostname_key ON {spam_filters_errors} (hostname);");
+      db_query("CREATE INDEX {spam_filters_errors}_timestamp_key ON {spam_filters_errors} (timestamp);");
+      /**
+       * Logging mechanism similar to watchdog, but provides additional 
+       * information specific to spam tracking.
+       */
+      db_query("CREATE TABLE {spam_log} (
+	lid serial PRIMARY KEY,
+        trid integer UNSIGNED NOT NULL DEFAULT '0',
+        level integer UNSIGNED NOT NULL DEFAULT '0',
+	content_type varchar(128) NOT NULL default '',
+	content_id integer NOT NULL default 0,
+	function varchar(255) NOT NULL default '',
+	uid integer NOT NULL default 0,
+	message varchar(255) NOT NULL default '',
+	timestamp integer NOT NULL default 0
+      );");
+      db_query("CREATE INDEX {spam_log}_sid_key ON {spam_log} (sid);");
+      db_query("CREATE INDEX {spam_log}_trid_key ON {spam_log} (trid);");
+      db_query("CREATE INDEX {spam_log}_timestamp_key ON {spam_log} (timestamp);");
+      /**
+       * Spam statistics.
+       */
+      db_query("CREATE TABLE {spam_statistics} (
+        stid serial PRIMARY KEY,
+        name varchar(64) NOT NULL DEFAULT '',
+        count integer UNSIGNED NOT NULL DEFAULT '0',
+        timestamp integer UNSIGNED DEFAULT '0',
+	CONSTRAINT spam_statistics_u UNIQUE(name)
+      );");
+      db_query("CREATE INDEX {spam_statistics}_u_key ON {spam_statistics} (name);");
+      break;
+  }
+}
+
+/** 
+ * Completely uninstall the spam module.
+ */
+function spam_uninstall() {
+  $tables = array('spam_filters', 'spam_tracker', 'spam_log', 'spam_filters_groups', 'spam_filters_groups_data', 'spam_filters_errors', 'spam_statistics');
+  foreach ($tables as $table) {
+    // We break out $table, otherwise this query gets misinterpreted.
+    db_query('DROP TABLE {'. $table .'}');
+  }
+  drupal_set_message(t('All spam module tables have been deleted.'));
+}
+
+/**
+ * When upgrading from the earlier 5.x-1.x versoin of the spam module, we need
+ * to skip _5301 through _5305, as they are contained in the _5300 update.  This
+ * is because the upgrade process wasn't written until late in the Alpha
+ * development of the module.
+ */
+function spam_skip_update($set = FALSE) {
+  static $skip = FALSE;
+  if (isset($set)) {
+    $skip = TRUE;
+  }
+  return $skip;
+}
+
+/**
+ * Upgrade websites that were running old Spam 2.0 modules.
+ */
+function spam_update_5300() {
+ $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $tables = array('spam_tracker', 'spam_log', 'spam_tokens', 'spam_custom', 'spam_reported');
+      foreach ($tables as $table) {
+        if ($result = db_result(db_query("SHOW TABLES LIKE '%s'", $table))) {
+          if ($table == 'spam_log') {
+            $ret[] = update_sql('DROP TABLE {'. $table .'}');
+          }
+          else {
+            $ret[] = update_sql('RENAME TABLE {'. $table .'} TO {old_'. $table .'}');
+          }
+        }
+      }
+      /**
+       * Provides global and granular per-content-type configurations for all
+       * enabled spam filters.  The status allows a filter to be enabled or
+       * disabled.  The weight allows filters to be ordered.  The gain allows
+       * you to minimize or amplify the effect of a given filter.
+       */
+      $ret[] = update_sql("CREATE TABLE {spam_filters} (
+        fid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        gid INT(11) UNSIGNED DEFAULT '0' NOT NULL,
+        name VARCHAR(128) NOT NULL DEFAULT '',
+        module VARCHAR(128) NOT NULL DEFAULT '',
+        status TINYINT UNSIGNED DEFAULT '0' NOT NULL,
+        weight TINYINT DEFAULT '0' NOT NULL,
+        gain TINYINT UNSIGNED DEFAULT '0' NOT NULL,
+        PRIMARY KEY fid (fid),
+        KEY gid (gid),
+        KEY name (name),
+        KEY module (module),
+        KEY status (status),
+        KEY weight (weight)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      $ret[] = update_sql("CREATE TABLE {spam_filters_groups} (
+        gid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL DEFAULT '',
+        weight TINYINT DEFAULT '0' NOT NULL,
+        PRIMARY KEY gid (gid),
+        KEY weight (weight)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      $ret[] = update_sql("CREATE TABLE {spam_filters_groups_data} (
+        gid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        content_type VARCHAR(64) NOT NULL DEFAULT '',
+        PRIMARY KEY gid_content_type (gid,content_type),
+        KEY content_type (content_type)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Tracks all filtered site content, included both spam and non-spam.
+       */
+      $ret[] = update_sql("CREATE TABLE {spam_tracker} (
+        sid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        content_type VARCHAR(128) NOT NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        score INT(4) UNSIGNED DEFAULT '0',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp INT(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY sid (sid),
+        UNIQUE KEY content_id_content_type (content_id,content_type),
+        KEY content_type (content_type),
+        KEY score (score),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       *
+       */
+      $ret[] = update_sql("CREATE TABLE {spam_filters_errors} (
+        bid INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        uid INT(11) UNSIGNED NOT NULL DEFAULT '0',
+        content_type VARCHAR(128) NOT NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        content_hash CHAR(32) NOT NULL DEFAULT '',
+        content TEXT NOT NULL,
+        form TEXT NOT NULL,
+        feedback TEXT NOT NULL,
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp INT(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY bid (bid),
+        KEY id_type (content_id,content_type),
+        UNIQUE KEY content_hash (content_hash),
+        KEY content_type (content_type),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Logging mechanism similar to watchdog, but provides additional 
+       * information specific to spam tracking.
+       */
+      $ret[] = update_sql("CREATE TABLE {spam_log} (
+        lid int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        trid int(11) UNSIGNED NOT NULL DEFAULT '0',
+        level int(2) UNSIGNED NOT NULL DEFAULT '0',
+        content_type VARCHAR(128) NULL DEFAULT '',
+        content_id INT(11) UNSIGNED DEFAULT '0',
+        uid int(10) UNSIGNED NOT NULL DEFAULT '0',
+        function varchar(255) NOT NULL DEFAULT '',
+        message varchar(255) NOT NULL DEFAULT '',
+        hostname VARCHAR(15) NOT NULL DEFAULT '',
+        timestamp int(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY lid (lid),
+        KEY trid (trid),
+        KEY content_type_content_id (content_type, content_id),
+        KEY message (message),
+        KEY uid (uid),
+        KEY hostname (hostname),
+        KEY timestamp (timestamp)
+      ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;");
+      /**
+       * Spam statistics.
+       */
+      $ret[] = update_sql("CREATE TABLE {spam_statistics} (
+        stid int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name varchar(64) NOT NULL DEFAULT '',
+        count int(11) UNSIGNED NOT NULL DEFAULT '0',
+        timestamp int(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY stid (stid),
+        UNIQUE KEY name (name)
+      ) TYPE=MyISAM /* 40100 DEFAULT CHARACTER SET utf8 */;");
+
+      // Extract data from old_spam_tracker table, then drop.
+      $result = db_query('SELECT * FROM {old_spam_tracker}');
+      while ($spam = db_fetch_object($result)) {
+        $ret[] = update_sql("INSERT INTO {spam_tracker} (content_type, content_id, score, hostname, timestamp) VALUES('$spam->source', $spam->id, $spam->probability, '$spam->hostname', $spam->timestamp)");
+      }
+      $ret[] = update_sql('DROP TABLE {old_spam_tracker}');
+      spam_skip_update(TRUE);
+
+      break;
+  }
+  return $ret;
+}
+
+/**
+ * Add trid field to spam_log table.
+ */
+function spam_update_5301() {
+  // Update contontained in _5300 if updating from 5.x-1.x spam module.
+  if (spam_skip_update()) return array();
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $ret[] = update_sql("ALTER TABLE {spam_log} ADD trid int(11) UNSIGNED NOT NULL DEFAULT '0' AFTER lid");
+      $ret[] = update_sql("ALTER TABLE {spam_log} ADD INDEX trid (trid)");
+      break;
+    case 'pgsql':
+      db_add_column($ret, 'spam_log', 'trid', 'int', array('not null' => TRUE, 'default' => "'0'"));
+      $ret[] = update_sql("CREATE INDEX {spam_log}_trid_key ON {spam_log} (trid);");
+      break;
+  }
+  return $ret;
+}
+
+/**
+ * Introduce spam_statistics table.
+ */
+function spam_update_5302() {
+  // Update contontained in _5300 if updating from 5.x-1.x spam module.
+  if (spam_skip_update()) return array();
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $ret[] = update_sql("CREATE TABLE {spam_statistics} (
+        stid int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+        name varchar(64) NOT NULL DEFAULT '',
+        count int(11) UNSIGNED NOT NULL DEFAULT '0',
+        timestamp int(11) UNSIGNED DEFAULT '0',
+        PRIMARY KEY stid (stid),
+        UNIQUE KEY name (name)
+      ) TYPE=MyISAM /* 40100 DEFAULT CHARACTER SET utf8 */;");
+      break;
+    case 'pgsql':
+      $ret[] = update_sql("CREATE TABLE {spam_statistics} (
+        stid serial PRIMARY KEY,
+        name varchar(64) NOT NULL DEFAULT '',
+        count integer UNSIGNED NOT NULL DEFAULT '0',
+        timestamp integer UNSIGNED DEFAULT '0',
+	CONSTRAINT spam_statistics_u UNIQUE(name)
+      );");
+      $ret[] = update_sql("CREATE INDEX {spam_statistics}_u_key ON {spam_statistics} (name);");
+  }
+
+  return $ret;
+}
+
+/**
+ * Mark spam comments as SPAM_COMMENT instead of COMMENT_NOT_PUBLISHED.
+ */
+function spam_update_5303() {
+  // Update contontained in _5300 if updating from 5.x-1.x spam module.
+  if (spam_skip_update()) return array();
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $result = db_query("SELECT cid FROM {comments} c INNER JOIN {spam_tracker} t ON c.cid = t.content_id wHERE t.content_type = 'comment' AND c.status = %d AND t.score >= %d", COMMENT_NOT_PUBLISHED, variable_get('spam_threshold', SPAM_DEFAULT_THRESHOLD));
+      while ($comment = db_fetch_object($result)) {
+        $ret[] = update_sql('UPDATE {comments} SET status = '. SPAM_COMMENT ." WHERE cid = $comment->cid");
+      }
+      break;
+  }
+  return $ret;
+}
+
+/**
+ * Add missing index, showed up in my slow query log.
+ */
+function spam_update_5304() {
+  // Update contontained in _5300 if updating from 5.x-1.x spam module.
+  if (spam_skip_update()) return array();
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $ret[] = update_sql('ALTER TABLE {spam_log} ADD KEY (message);');
+  }
+  return $ret;
+}
+
+/**
+ * Add uid to spam_filters_errors table.
+ * Add form to spam_filters_errors table.
+ * Update id_type key to not be unique, id can be 0.
+ */
+function spam_update_5305() {
+  // Update contontained in _5300 if updating from 5.x-1.x spam module.
+  if (spam_skip_update()) return array();
+  $ret = array();
+  switch ($GLOBALS['db_type']) {
+    case 'mysql':
+    case 'mysqli':
+    default:
+      $ret[] = update_sql("ALTER TABLE {spam_filters_errors} ADD uid INT(11) UNSIGNED NOT NULL DEFAULT '0'");
+      $ret[] = update_sql('ALTER TABLE {spam_filters_errors} ADD form TEXT NOT NULL');
+      $ret[] = update_sql('ALTER TABLE {spam_filters_errors} DROP KEY content_id_content_type');
+      $ret[] = update_sql('ALTER TABLE {spam_filters_errors} ADD KEY id_type (content_id,content_type)');
+      break;
+  }
+  return $ret;
+}
+

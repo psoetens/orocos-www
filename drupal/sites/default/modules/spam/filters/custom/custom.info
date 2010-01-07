@@ -1,0 +1,12 @@
+; $Id: custom.info,v 1.1.2.2 2008/09/29 15:57:12 jeremy Exp $
+name = Custom filter
+description = Allows the creation of custom spam filter rules.
+package = Spam
+dependencies = spam
+
+
+; Information added by drupal.org packaging script on 2008-09-29
+version = "5.x-3.0-beta1"
+project = "spam"
+datestamp = "1222710636"
+
