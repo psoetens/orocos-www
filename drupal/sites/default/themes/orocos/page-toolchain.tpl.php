@@ -17,8 +17,8 @@
       <?php if ($logo) { ?><a href="<?php print $base_path ?>" title="<?php print t('Home') ?>"><img src="<?php print $logo ?>" alt="<?php print t('Home') ?>" /></a><?php } ?>
       <?php if (preg_match("/toolchain/i", drupal_get_path_alias($_GET['q'])) ) { ?>
           <h1 class='site-name'><a href="<?php print $base_path ?><?php print "rtt" ?>" title="<?php print t('RTT Home') ?>">Orocos Toolchain</a></h1>
-          <div class='site-slogan'><?php print "Smarter realtime. Safer threads" ?></div> 
-      <?php }
+          <div class='site-slogan'><?php print "Design, Generate, Deploy" ?></div> 
+      <?php }?>
     <?php print $breadcrumb ?>
     </td>
     <td id="menu">

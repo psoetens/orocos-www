@@ -11,6 +11,9 @@ body {
   color: #212121;
   background-color: #fff;
   font: 90% Verdana, Arial, Helvetica, sans-serif;
+  width: 1050px;
+  margin-left: auto;
+  margin-right: auto;
 }
 tr.odd td, tr.even td {
   padding: 0.3em;
@@ -65,6 +68,7 @@ pre {
 table {
   /* make <td> sizes relative to body size! */
   font-size: 1em;
+  border-collapse: separate;
 }
 .form-item label {
   font-size: 1em;
@@ -93,6 +97,7 @@ table {
 #logo {
   vertical-align: middle;
   border: 0;
+  width: 60%;
 }
 #logo img {
   float: left;
@@ -178,7 +183,7 @@ table {
 .breadcrumb {
 margin-top: 1em;
 margin-right: 0px;
-margin-bottom: -16px;
+margin-bottom: 0px;
 margin-left: 163px;
 }
 .messages {
@@ -227,12 +232,18 @@ margin-left: 163px;
 ** additional rules /with only the differing properties!/ to .parent .class.
 ** See .comment .title for an example.
 */
-.title, .title a {
+.title {
   font-weight: bold;
   font-size: 1.2em;
   color: #347;
   margin: 0 auto 0 auto;  /* decrease default margins for h<x>.title */
   border-bottom: 1px solid #bbb;
+}
+.title a {
+  font-weight: bold;
+  font-size: 1.2em;
+  color: #347;
+  margin: 0 auto 0 auto;  /* decrease default margins for h<x>.title */
 }
 .submitted {
   color: #999;
