@@ -16,7 +16,7 @@
     <td id="logo">
       <?php if ($logo) { ?><a href="<?php print $base_path ?>" title="<?php print t('Home') ?>"><img src="<?php print $logo ?>" alt="<?php print t('Home') ?>" /></a><?php } ?>
       <?php if (preg_match("/toolchain/i", drupal_get_path_alias($_GET['q'])) ) { ?>
-          <h1 class='site-name'><a href="<?php print $base_path ?><?php print "rtt" ?>" title="<?php print t('RTT Home') ?>">Orocos Toolchain</a></h1>
+          <h1 class='site-name'><a href="<?php print $base_path ?><?php print "toolchain" ?>" title="<?php print t('Orocos Toolchain Home') ?>">Orocos Toolchain</a></h1>
           <div class='site-slogan'><?php print "Design, Generate, Deploy" ?></div> 
       <?php }?>
     <?php print $breadcrumb ?>
