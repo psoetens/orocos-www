@@ -96,15 +96,24 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
         foreach ($list as $val) {
             $tmp[] = preg_quote($val, '/');
         }
-        $schemes = implode('|', $tmp);
+        $protoschemes = implode('|', $tmp);
+	// protocols + '/'
+	$allschemes = $protoschemes . "|\/";
         
         // build the regex
         $this->regex =
-            "($schemes)" . // allowed schemes
+            "($protoschemes)" . // allowed schemes
             "(" . // start pattern
-            "[^ \\/\"\'{$this->wiki->delim}]*\\/" . // no spaces, backslashes, slashes, double-quotes, single quotes, or delimiters;
+            "[^ \\/\"\'{$this->wiki->delim}\|]*\\/" . // no spaces, backslashes, slashes, double-quotes, single quotes, or delimiters;
             ")*" . // end pattern
-            "[^ \\t\\n\\/\"\'{$this->wiki->delim}]*" .
+            "[^ \\t\\n\\/\"\'{$this->wiki->delim}\|]*" .
+            "[A-Za-z0-9\\/?=&~_]";
+        $this->allregex =
+            "($allschemes)" . // allowed schemes + '/'
+            "(" . // start pattern
+            "[^ \\/\"\'{$this->wiki->delim}\|]*\\/" . // no spaces, backslashes, slashes, double-quotes, single quotes, or delimiters;
+            ")*" . // end pattern
+            "[^ \\t\\n\\/\"\'{$this->wiki->delim}\|]*" .
             "[A-Za-z0-9\\/?=&~_]";
     }
     
@@ -122,7 +131,7 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
         // 
 
         // the regular expression for this kind of URL
-        $tmp_regex = '/\[(' . $this->regex . ')[ |]([^\]]+)\]/';
+        $tmp_regex = '/\[(' . $this->allregex . ')[ |]([^\]]+)\]/';
 
         // use a custom callback processing method to generate
         // the replacement text for matches.
@@ -139,7 +148,7 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
         // 
         
         // the regular expression for this kind of URL
-        $tmp_regex = '/\[(' . $this->regex . ')\]/U';
+        $tmp_regex = '/\[(' . $this->allregex . ')\]/U';
         
         // use a custom callback processing method to generate
         // the replacement text for matches.
@@ -153,7 +162,7 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
         
         // -------------------------------------------------------------
         // 
-        // Normal inline URLs.
+        // Normal inline URLs. --> ONLY PROTOCOL URLs !
         // 
         
         // the regular expression for this kind of URL
@@ -167,6 +176,8 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
             $this->wiki->source
         );
 
+/* Don't use these, they annoy us too much, ie match too much, for example, file paths.
+   Use http:// etc to force the above case of normal inline URLs.
 
         //$tmp_regex = '/(^|[^A-Za-z])([a-zA-Z])(.*?)/';
         $tmp_regex = '/(^|\s)([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-]+(\.[a-zA-Z]+)+)($|\s)/';
@@ -186,6 +197,7 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
             array(&$this, 'processInlineEmail'),
             $this->wiki->source
         );
+*/
     }
     
     
