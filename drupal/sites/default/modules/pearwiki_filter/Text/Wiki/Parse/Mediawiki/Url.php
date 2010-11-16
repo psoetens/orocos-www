@@ -280,6 +280,10 @@ class Text_Wiki_Parse_Url extends Text_Wiki_Parse {
     
      function processOrdinary(&$matches)
     {
+        if ($matches[1] == '/quote') {
+             return '[/quote]';
+        }
+
     	// keep a running count for footnotes 
         $this->footnoteCount++;
         
