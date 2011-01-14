@@ -1,0 +1,72 @@
+# translation of nl.po to
+# translation of user_status.po to
+# LANGUAGE translation of Drupal (user_status.module)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# Generated from file: user_status.module,v 1.4.2.1 2006/04/22 07:50:51 dww
+#
+# Bèr Kessels <ber@webschuur.com>, 2006.
+msgid ""
+msgstr ""
+"Project-Id-Version: nl\n"
+"POT-Creation-Date: 2006-06-12 21:05+0200\n"
+"PO-Revision-Date: 2006-06-12 21:11+0200\n"
+"Last-Translator: Bèr Kessels <ber@webschuur.com>\n"
+"Language-Team:  <nl@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"X-Generator: KBabel 1.11.2\n"
+
+#: user_status.module:27
+msgid "Send user account status change notifications by email."
+msgstr "Verstuur wijzigingen in gebruiker account status, per e-mail."
+
+#: user_status.module:97
+msgid "Activate status"
+msgstr "Activatie status"
+
+#: user_status.module:103
+msgid "Notify user when account is activated."
+msgstr "Bericht gebruiker wanneer het account geactiveerd wordt."
+
+#: user_status.module:108;136;164
+msgid "Subject"
+msgstr "Onderwerp"
+
+#: user_status.module:112;140;168
+msgid "Use %user as a placeholder for automatic username replacement."
+msgstr "Gebruik %user als een jokerteken voor automatische gebruikersnaam plaatsing."
+
+#: user_status.module:116;144;172
+msgid "Body"
+msgstr "Berichttekst"
+
+#: user_status.module:120
+msgid "Use %user as a placeholder for automatic username replacement, %site for the name configured in Drupal General Settings, and %loginurl for the login page of this site."
+msgstr "Gebruik %user als een jokerteken voor automatische gebruikersnaam plaatsing, %site voor de sitenaam, en %loginurl voor de aanmeldpagina van deze site."
+
+#: user_status.module:125
+msgid "Block status"
+msgstr "Blok status"
+
+#: user_status.module:131
+msgid "Notify user when account is blocked."
+msgstr "Bericht gebruiker wanneer het account geblokkeerd wordt."
+
+#: user_status.module:148;176
+msgid "Use %user as a placeholder for automatic username replacement, and %site for the name configured in Drupal General Settings"
+msgstr "Gebruik %user als een jokerteken voor automatische gebruikersnaam plaatsing, %site voor de sitenaam."
+
+#: user_status.module:153
+msgid "Delete status"
+msgstr "Status verwijderen"
+
+#: user_status.module:159
+msgid "Notify user when account is deleted."
+msgstr "Bericht gebruiker wanneer het account verwijderd wordt."
+
+#: user_status.module:0
+msgid "user_status"
+msgstr "gebruiker status"
+
