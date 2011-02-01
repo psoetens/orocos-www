@@ -36,7 +36,7 @@ class Text_Wiki_Mediawiki extends Text_Wiki {
         'Prefilter',
         'Delimiter',
         'Code',
-        'Comment',
+//        'Comment',
         'Preformatted',
 //        'Plugin',
 //        'Function',
