@@ -443,8 +443,8 @@ function listhandler_mailhandler($node, $result, $msg_number, $header, $mailbox)
     // We need to ensure that no messages that have been sent by listhandler on this site (!)
     // get processed. We would get an infinite loop on a mailing list.
     $dir = str_replace("/", ".", substr(strchr(str_replace("http://", "", $base_url), "/"), 1));
-    $regex = "<listhandler=[[:print:]]+@". $dir . strtolower($_SERVER["SERVER_NAME"]) .">";
-    if (ereg($regex, $header->message_id)) {
+    $regex = "/<listhandler=[[:print:]]+@". $dir . strtolower($_SERVER["SERVER_NAME"]) .">/";
+    if (preg_match($regex, $header->message_id)) {
       // Sent by listhandler on this site. Destroy the node.
       watchdog('listhandler', "Discarded message '!s' to avoid loop.", array("!s" => $node->title), WATCHDOG_NOTICE);
       unset($node);
