@@ -236,7 +236,7 @@ function listhandler_comment($edit = array(), $type) {
  * Includes a References/In_reply-To header if possible
  */
 function listhandler_send_mail($edit) {
-  global $user, $base_url;
+  global $user, $base_url, $base_root;
 
   if (!$user->uid) {
     $edit['name'] = variable_get('anonymous', 'Anonymous');
@@ -310,7 +310,8 @@ function listhandler_send_mail($edit) {
     $mid['Return-Path'] = $edit['mail'];
 
     // We add tokens to the MID. Replies to comments sent by listhandler can thus be classified easier.
-    $msgid = "<listhandler=". $edit["mid"] ."&site=". $dir . $_SERVER["SERVER_NAME"] ."&nid=". $edit["nid"] ."&pid=". $edit["pid"] ."&cid=".  $edit["cid"] ."&uid=". $user->uid ."&tid=".  $edit["tid"] ."&". md5($edit["nid"] . $edit["cid"]) ."@". $dir . strtolower($_SERVER["SERVER_NAME"]) .">";
+    $hostid = substr($base_url,strlen($base_root . "://"));
+    $msgid = "<listhandler=". $edit["mid"] ."&site=". $dir . $hostid ."&nid=". $edit["nid"] ."&pid=". $edit["pid"] ."&cid=".  $edit["cid"] ."&uid=". $user->uid ."&tid=".  $edit["tid"] ."&". md5($edit["nid"] . $edit["cid"]) ."@". $dir . strtolower($hostid) .">";
     $mid['Message-Id'] = $msgid;
 
     // Ensure emails are treated as mailing list posts, not junk
@@ -382,7 +383,7 @@ function listhandler_send_mail($edit) {
  * $header: Some, but not all headers (From, To, message_id, ...) of the current message.
  */
 function listhandler_mailhandler($node, $result, $msg_number, $header, $mailbox) {
-  global $base_url;
+  global $base_url, $base_root;
 
   if ($node->tid) { // If no tid is assigned, then the mail is not comming through a mailhandler enabled list. Do nothing.
     $node->cid = 0; // Might have a cid from the msg id. This will confuse comment_post. Updating comments via mail does not make sense anyway. GK
@@ -391,7 +392,8 @@ function listhandler_mailhandler($node, $result, $msg_number, $header, $mailbox)
     // We need to ensure that no messages that have been sent by listhandler on this site (!)
     // get processed. We would get duplicate postings in Drupal otherwise.
     $dir = str_replace("/", ".", substr(strchr(str_replace("http://", "", $base_url), "/"), 1));
-    $regex = "/<listhandler=[[:print:]]+@". $dir . strtolower($_SERVER["SERVER_NAME"]) .">/";
+    $hostid = substr($base_url,strlen($base_root . "://"));
+    $regex = "/listhandler=.+@". $dir . strtolower($hostid) ."/";
     if (preg_match($regex, $header->message_id)) {
       // Sent by listhandler on this site. Destroy the node.
       watchdog('listhandler', t("Discarded message '!s' to avoid duplicate posts.", array("!s" => $node->title)));
@@ -400,7 +402,8 @@ function listhandler_mailhandler($node, $result, $msg_number, $header, $mailbox)
     }
     else {
       // Debug
-      //if($node->site != $dir . $_SERVER["SERVER_NAME"]) { // parent (!) not sent by listhandler on this site.
+      watchdog('listhandler', t("Accepted new message '!s' because regex '%r' did not match: '%h'", array("!s" => $node->title, "%r" => $regex, "%h" => $header->message_id)));
+      //if($node->site != $dir . $hostid) { // parent (!) not sent by listhandler on this site.
       if ($node->uid == 0) { // mailhandler did not find the author, create a new account
         $node = listhandler_create_author($node, $header);
       }
