@@ -82,6 +82,7 @@ DirectoryIndex index.php
 # Only match physical .html pages here:
 RewriteRule   ^(stable.+)    http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
 RewriteRule   ^(devel.+)     http://people.mech.kuleuven.be/~orocos/pub/$1 [R,L]
+RewriteRule   ^(dfki.+)      http://www.rock-robotics.org/ [R,L]
 
   # If your site can be accessed both with and without the 'www.' prefix, you
   # can use one of the following settings to redirect users to your preferred
