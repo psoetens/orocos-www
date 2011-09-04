@@ -1,5 +1,5 @@
 <?php
-// $Id: xmlrpcs.inc,v 1.21.2.1 2008/05/10 01:53:33 drumm Exp $
+// $Id: xmlrpcs.inc,v 1.24.2.4 2010/06/02 12:52:07 goba Exp $
 
 /**
  * The main entry point for XML-RPC requests.
@@ -55,7 +55,7 @@ function xmlrpc_server($callbacks) {
 
   $data = file_get_contents('php://input');
   if (!$data) {
-     die('XML-RPC server accepts POST requests only.');
+    die('XML-RPC server accepts POST requests only.');
   }
   $xmlrpc_server->message = xmlrpc_message($data);
   if (!xmlrpc_message_parse($xmlrpc_server->message)) {
@@ -64,10 +64,13 @@ function xmlrpc_server($callbacks) {
   if ($xmlrpc_server->message->messagetype != 'methodCall') {
     xmlrpc_server_error(-32600, t('Server error. Invalid XML-RPC. Request must be a methodCall.'));
   }
+  if (!isset($xmlrpc_server->message->params)) {
+    $xmlrpc_server->message->params = array();
+  }
   xmlrpc_server_set($xmlrpc_server);
   $result = xmlrpc_server_call($xmlrpc_server, $xmlrpc_server->message->methodname, $xmlrpc_server->message->params);
 
-  if ($result->is_error) {
+  if (is_object($result) && !empty($result->is_error)) {
     xmlrpc_server_error($result);
   }
   // Encode the result
@@ -109,7 +112,7 @@ function xmlrpc_server_output($xml) {
   header('Connection: close');
   header('Content-Length: '. strlen($xml));
   header('Content-Type: text/xml');
-  header('Date: '.date('r'));
+  header('Date: '. date('r'));
   echo $xml;
   exit;
 }
@@ -201,12 +204,7 @@ function xmlrpc_server_call($xmlrpc_server, $methodname, $args) {
       }
     }
   }
-  /*
-  if (count($args) == 1) {
-    // If only one parameter just send that instead of the whole array
-    $args = $args[0];
-  }
-  */
+
   if (!function_exists($method)) {
     return xmlrpc_error(-32601, t('Server error. Requested function @method does not exist.', array("@method" => $method)));
   }
@@ -232,7 +230,7 @@ function xmlrpc_server_multicall($methodcalls) {
     elseif ($ok) {
       $result = xmlrpc_server_call($xmlrpc_server, $method, $params);
     }
-    if ($result->is_error) {
+    if (is_object($result) && !empty($result->is_error)) {
       $return[] = array(
         'faultCode' => $result->code,
         'faultString' => $result->message

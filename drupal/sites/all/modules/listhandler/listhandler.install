@@ -1,73 +1,155 @@
 <?php
-// $Id: listhandler.install,v 1.2.2.4 2008/02/03 15:29:31 philipnet Exp $
+// $Id: listhandler.install,v 1.13 2008/10/27 20:05:54 philipnet Exp $
 
 /**
- * Implementation of hook_install()
+ * @file
+ * Listhandler install file.
+ */
+
+/**
+ * Implementation of hook_install().
  */
 function listhandler_install() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      db_query("CREATE TABLE {listhandler} (
-      lid         int(10) unsigned not null auto_increment primary key,
-      msgid       varchar(255) not null,
-      nid         int(10) NOT NULL default '0',
-      cid         int(10) NOT NULL default '0',
-      pid         int(10) NOT NULL default '0',
-      uid         int(10) NOT NULL default '0',
-      mid         int(10) NOT NULL default '0',
-      tid         int(10) NOT NULL default '0'
-       ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
-       db_query("ALTER TABLE {mailhandler} ADD prefix varchar(255) not null DEFAULT ''");
-      break;
-    case 'pgsql':
-      db_query("CREATE TABLE {listhandler} (
-      lid         serial,
-      msgid       text not null,
-      nid         integer NOT NULL default 0,
-      cid         integer NOT NULL default 0,
-      pid         integer NOT NULL default 0,
-      uid         integer NOT NULL default 0,
-      mid         integer NOT NULL default 0,
-      tid         integer NOT NULL default 0,
-      PRIMARY KEY (lid)
-       );");
-       db_query("ALTER TABLE {mailhandler} ADD prefix varchar(255) not null DEFAULT ''");
-      break;
-
-  }
+  // Create tables.
+  drupal_install_schema('listhandler');
 }
 
 /**
- * Implementation of hook_uninstall
+ * Implementation of hook_uninstall().
+ * Function executed during listhandler module uninstall.
  */
 function listhandler_uninstall() {
-  db_query('DROP TABLE {listhandler}');
+  drupal_uninstall_schema('listhandler');
   variable_del('listhandler_from');
   variable_del('listhandler_strip_title');
   variable_del('listhandler_accountstatus');
   variable_del('listhandler_attachments_as_link');
-  db_query("ALTER TABLE {mailhandler} DROP prefix");
+  variable_del('listhandler_htmltotext');
 }
 
 /**
- * Update database hooks
+ * Listhandler module database schema.
+ * Implementation of hook_schema().
+ */
+function listhandler_schema() {
+  $schema['listhandler'] = array(
+    'description' => t(''),
+    'fields'  => array(
+      'lid'   => array(
+        'description' => t(''),
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE
+      ),
+      'msgid' => array(
+        'description' => t(''),
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE
+      ),
+      'nid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'cid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'pid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'uid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'mid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'tid'   => array(
+        'description' => t(''),
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0
+      )
+    ),
+    'primary key' => array('lid')
+  );
+
+  $schema['listhandler_prefix'] = array(
+  'description' => t(''),
+    'fields' => array(
+      'mid'    => array(
+        'description' => t(''),
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE
+      ),
+      'prefix' => array(
+        'description' => t(''),
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => ''
+      )
+    ),
+    'primary key' => array('mid')
+  );
+
+  return $schema;
+}
+
+/**
+ * Update database hooks.
  */
 function listhandler_update_1() {
   return _system_update_utf8(array('listhandler'));
 }
 
-/**
- * listhandler_update_5000
- * This just removes the /duplicate/ index on lid ;-) .
- */
 function listhandler_update_5000() {
   $items = array();
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      $item[] = update_sql("ALTER TABLE {listhandler} DROP INDEX lid");
-      break;
-  }
+
+  db_drop_index($items, "listhandler", "lid");
+
   return $items;
+}
+
+function listhandler_update_6000() {
+  // Migrate the extra column in {mailhandler} into a listhandler table:
+  $ret = array();
+  if (db_column_exists('{mailhandler}', 'prefix')) {
+    watchdog('listhandler', 'We are updating the listhandler_prefix table', array(), WATCHDOG_DEBUG);
+    $schema['listhandler_prefix'] = array(
+      'description' => '',
+      'fields' => array(
+        'mid'    => array('type' => 'serial',  'unsigned' => TRUE, 'not null' => TRUE),
+        'prefix' => array('type' => 'varchar', 'length' => 255,    'default' => '')
+      ),
+      'primary key' => array('mid')
+    );
+    db_create_table($ret, 'listhandler_prefix', $schema['listhandler_prefix']);
+    $result = db_query("SELECT mid,prefix FROM {mailhandler} WHERE prefix <> ''");
+    while ($row = db_fetch_array($result)) {
+      watchdog('listhandler', "INSERT INTO listhandler_prefix VALUES('%mid', '%prefix')", array('%mid' => $row['mid'], '%prefix' => $row['prefix']), WATCHDOG_DEBUG);
+      $res = db_query("INSERT INTO {listhandler_prefix} VALUES('%s', '%s')", $row['mid'], $row['prefix']);
+    }
+    db_drop_field($ret, '{mailhandler}', 'prefix');
+  }
+  return $ret;
 }

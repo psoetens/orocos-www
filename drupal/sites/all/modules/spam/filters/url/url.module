@@ -1,7 +1,8 @@
 <?php
-// $Id: url.module,v 1.1.2.4 2008/09/19 17:56:26 jeremy Exp $
+// $Id: url.module,v 1.1.2.4.2.1 2008/12/25 05:42:11 jeremy Exp $
 
 /**
+ * @file
  * URL filter plug in for the spam module.
  * Copyright(c) 2007-2008
  *  Jeremy Andrews <jeremy@tag1consulting.com>.  All rights reserved.
@@ -54,7 +55,7 @@ function _url_extract($content, $type, $fields, $extra = array()) {
     $content = (array)$content;
   }
 
- if (!isset($urls["$type-$id"])) {
+  if (!isset($urls["$type-$id"])) {
     $string = '';
     foreach ($fields['main'] as $field) {
       $string .= $content["$field"] .' ';
@@ -75,7 +76,7 @@ function _url_extract($content, $type, $fields, $extra = array()) {
       preg_match("/^()?([^\/\"\']+)/i", $url, $domain);
       // get root domain (ie sample.com)
       preg_match("/[^\.\/]+\.[^\.\/]+$/", $domain[2], $root);
-      $url = htmlspecialchars(strtolower($root[0]));
+      $url = htmlspecialchars(drupal_strtolower($root[0]));
       _url_count($url);
       $u[] = $url;
     }
@@ -113,10 +114,10 @@ function url_spam_filter($content, $type, $fields, $extra = array(), $filter_tes
     if ($limit > -1) {
       // Sort urls from most repeated to least repeated.
       asort($count);
-  
+
       // skip count['total']
       array_pop($count);
-  
+
       $max = array_pop($count);
       if ($max > $limit) {
         spam_log(SPAM_VERBOSE, 'url_spam_filter', t('repeated urls(@total) > url_limit_repeat(@limit)', array('@total' => $max, '@limit' => variable_get('url_limit_repeat', 5))), $type, $id);
@@ -127,7 +128,7 @@ function url_spam_filter($content, $type, $fields, $extra = array(), $filter_tes
         $action['total'] = 99;
       }
     }
-  
+
     foreach ($urls as $url) {
       $p = db_fetch_object(db_query("SELECT probability FROM {bayesian_tokens} WHERE class = 'url' AND token = '%s'", $url));
       $action['url'][] = array(
@@ -142,7 +143,7 @@ function url_spam_filter($content, $type, $fields, $extra = array(), $filter_tes
       spam_log(SPAM_DEBUG, 'url_spam_filter', t('not spam url(@url) probability(@probability)', array('@url' => $url, '@probability' => $p->probability)), $type, $id);
     }
   }
-  
+
   if ($spam) {
     $action['total'] = 99;
   }

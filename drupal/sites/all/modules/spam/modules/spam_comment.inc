@@ -1,4 +1,10 @@
 <?php
+// $Id: spam_comment.inc,v 1.1.2.1.2.11.2.10 2009/08/06 20:37:19 jeremy Exp $
+
+/**
+ * @file
+ * Include file for integration with comments.
+ */
 
 define('SPAM_COMMENT', 9);
 
@@ -42,7 +48,7 @@ function _spam_comment_cid($id = NULL) {
   return $cid;
 }
 
-/** 
+/**
  * Spam module _spamapi() hook.
  */
 function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
@@ -70,7 +76,7 @@ function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
       ));
 
     case 'filter_content_type':
-      return(variable_get('spam_filter_comments', 1));
+      return (variable_get('spam_filter_comments', 1));
 
     case 'filter_fields':
       // Tell spam module which fields it should scan for spam.
@@ -124,6 +130,11 @@ function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
         '#value' => $arg1['comment'],
         '#disabled' => TRUE,
       );
+      $form['comment']['author'] = array(
+        '#type' => 'markup',
+        '#prefix' => '<div><strong>' . t('Author') . ':</strong></div>',
+        '#value' => theme('username', user_load(array('uid' => $arg1['uid']))),
+      );
       return $form;
 
     case 'load':
@@ -143,8 +154,6 @@ function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
       else {
         return SPAM_NOT_PUBLISHED;
       }
-
-
 
     case 'hostname':
       return db_result(db_query('SELECT hostname FROM {comments} WHERE cid = %d', $arg1));
@@ -173,16 +182,15 @@ function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
     case 'menu':
       // Create page for listing all spam comments in comment admin section.
       $items = array();
-      if ($arg1) {
-        $items[] = array(
-          'path' => 'admin/content/comment/list/spam', 
-          'title' => t('Spam'),
-          'callback' => 'spam_comment_admin',
-          'callback arguments' => array('spam'),
-          'access' => user_access('administer spam'),
-          'type' => MENU_LOCAL_TASK
-         );
-      }
+      $items['admin/content/comment/list/spam'] = array(
+        'title' => t('Spam'),
+        'page callback' => 'spam_comment_admin',
+        'access arguments' => array('administer spam'),
+        //TODO: remove dependencies on comment.admin.inc?
+        'file' => 'comment.admin.inc',
+        'file path' => drupal_get_path('module', 'comment'),
+        'type' => MENU_LOCAL_TASK,
+      );
       return $items;
 
     case 'publish':
@@ -203,48 +211,35 @@ function comment_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
         _comment_update_node_statistics($nid);
       }
       break;
+
+    case 'theme_forms':
+      // Add spam comments admin form to spam.module's hook_theme.
+      return array(
+        'spam_comment_admin_overview' => array(
+          'file' => 'modules/spam_comment.inc',
+          'arguments' => array(
+            'form' => NULL,
+          ),
+        ),
+      );
   }
 }
 
 /**
- * Form alter gets it's own function so we can reference &$form without causing
+ * Form alter gets its own function so we can reference &$form without causing
  * errors in PHP4 installations.  (If we use spamapi, we have to set a default,
  * which PHP4 doesn't support.)
  */
-function comment_spamapi_form_alter($form_id, &$form) {
-  // Hook to scan comment before it is inserted into the database.
+function comment_spamapi_form_alter(&$form, &$form_state, $form_id) {
+  // Scan comments before they are inserted into the database
   if ($form_id == 'comment_form' && is_array($form)) {
-    $form['admin']['status']['#options'][9] = t('Spam');
-    $comment = $form['#post'];
-    if (is_array($comment) && $comment['op'] == t('Post comment')) {
-      $_SESSION['spam_form'] = $form;
-      $cid = $form['cid']['#value'];
-      // No need to scan a comment if it's being manually marked as spam.
-      if ($comment['status'] == 9) {
-        if (!spam_score_is_spam(_spam_comment_score($cid))) {
-          // Mark previously not-spam comment as spam
-          spam_mark_as_spam('comment', $cid);
-        }
-      }
-      else {
-        if (spam_score_is_spam(_spam_comment_score($cid))) {
-          // Mark previously spam comment as not-spam
-          spam_mark_as_not_spam('comment', $cid);
-        }
-        else {
-          spam_scan($comment, 'comment');
-        }
-      }
-    }
-    else {
-      if (isset($_SESSION['spam_form'])) {
-        unset($_SESSION['spam_form']);
-      }
-    }
+    $form['#validate'][] = 'comment_spam_scan';
   }
   // Add spam options to comment form
-  else if ($form_id == 'comment_admin_overview' || 
-           $form_id == 'spam_comment_admin_overview') {
+  else if ($form_id == 'comment_admin_overview' || $form_id == 'spam_comment_admin_overview') {
+    $form['#spam_submit_valuetype'] = 'comments';
+    $form['#spam_submit_itemtype'] = 'comment';
+    $form['#submit'] = array_merge(array('spam_admin_overview_submit'), $form['#submit']);
     $parameters = $form['#parameters'];
     if (is_array($parameters)) {
       if (!in_array('new', $parameters)) {
@@ -254,7 +249,7 @@ function comment_spamapi_form_alter($form_id, &$form) {
         $form['options']['operation']['#options']['markasspam'] = 'Mark the selected comments as spam';
       }
       if (in_array('new', $parameters)) {
-        $form['options']['operation']['#options']['teachnotspam'] = 'Teach filters selected comments are not spam.';
+        $form['options']['operation']['#options']['teachnotspam'] = 'Teach filters selected comments are not spam';
       }
     }
     if (is_array($form['#post']) && is_array($form['#post']['comments'])) {
@@ -310,7 +305,7 @@ function spam_comment_admin() {
  * create a spam overview page.  This is nearly an exact copy of that function,
  * with minor changes for loading spam and processing it.
  */
-function spam_comment_admin_overview($arg) {
+function spam_comment_admin_overview(&$form_state, $arg) {
   // build an 'Update options' form
   $form['options'] = array(
     '#type' => 'fieldset', '#title' => t('Update options'),
@@ -318,9 +313,9 @@ function spam_comment_admin_overview($arg) {
   );
   $options = array(
     'markasnotspam' => t('Mark the selected comments as not spam'),
-    'delete' => t('Delete the selcted comments'),
+    'delete' => t('Delete the selected comments'),
   );
-  
+
   $form['options']['operation'] = array('#type' => 'select', '#options' => $options, '#default_value' => 'markasnotspam');
   $form['options']['submit'] = array('#type' => 'submit', '#value' => t('Update'));
 
@@ -329,32 +324,35 @@ function spam_comment_admin_overview($arg) {
     theme('table_select_header_cell'),
     array('data' => t('Subject'), 'field' => 'subject'),
     array('data' => t('Author'), 'field' => 'name'),
+    array('data' => t('Posted in'), 'field' => 'node_title'),
     array('data' => t('Time'), 'field' => 'timestamp', 'sort' => 'desc'),
     array('data' => t('Operations'))
   ));
-  $result = pager_query('SELECT c.subject, c.nid, c.cid, c.comment, c.timestamp, c.status, c.name, c.homepage, u.name AS registered_name, u.uid FROM {comments} c INNER JOIN {users} u ON u.uid = c.uid WHERE c.status = %d'. tablesort_sql($form['header']['#value']), 50, 0, NULL, SPAM_COMMENT);
+  $result = pager_query('SELECT c.subject, c.nid, c.cid, c.comment, c.timestamp, c.status, c.name, c.homepage, u.name AS registered_name, u.uid, n.title AS node_title FROM {comments} c INNER JOIN {users} u ON u.uid = c.uid INNER JOIN {node} n ON n.nid = c.nid WHERE c.status = %d'. tablesort_sql($form['header']['#value']), 50, 0, NULL, SPAM_COMMENT);
 
   // build a table listing the appropriate comments
   $destination = drupal_get_destination();
   while ($comment = db_fetch_object($result)) {
     $comments[$comment->cid] = '';
     $comment->name = $comment->uid ? $comment->registered_name : $comment->name;
-    $form['subject'][$comment->cid] = array('#value' => l($comment->subject, 'node/'. $comment->nid, array('title' => truncate_utf8($comment->comment, 128)), NULL, 'comment-'. $comment->cid));
+    $form['subject'][$comment->cid] = array('#value' => l($comment->subject, 'node/'. $comment->nid, array('attributes' => array('title' => truncate_utf8($comment->comment, 128)), 'fragment' => 'comment-'. $comment->cid)));
     $form['username'][$comment->cid] = array('#value' => theme('username', $comment));
+    $form['node_title'][$comment->cid] = array('#value' => l($comment->node_title, 'node/'. $comment->nid));
     $form['timestamp'][$comment->cid] = array('#value' => format_date($comment->timestamp, 'small'));
-    $form['operations'][$comment->cid] = array('#value' => l(t('edit'), 'comment/edit/'. $comment->cid, array(), $destination));
+    $form['operations'][$comment->cid] = array('#value' => l(t('edit'), 'comment/edit/'. $comment->cid, array('query' => $destination)));
   }
   $form['comments'] = array('#type' => 'checkboxes', '#options' => $comments);
   $form['pager'] = array('#value' => theme('pager', NULL, 50, 0));
+
   return $form;
 }
 
 /**
  * Duplicate function from comment module so we can set correct goto url.
  */
-function spam_comment_admin_overview_validate($form_id, $form_values) {
-  $form_values['comments'] = array_diff($form_values['comments'], array(0));
-  if (count($form_values['comments']) == 0) {
+function spam_comment_admin_overview_validate($form, &$form_state) {
+  $form_state['values']['comments'] = array_diff($form_state['values']['comments'], array(0));
+  if (count($form_state['values']['comments']) == 0) {
     form_set_error('', t('Please select one or more comments to perform the update on.'));
     drupal_goto('admin/content/comment/list/spam');
   }
@@ -363,14 +361,27 @@ function spam_comment_admin_overview_validate($form_id, $form_values) {
 /**
  * Re-use function from comment module.
  */
-function spam_comment_admin_overview_submit($form_id, $form_values) {
-  return comment_admin_overview_submit($form_id, $form_values);
+function spam_comment_admin_overview_submit($form, &$form_state) {
+  comment_admin_overview_submit($form, $form_state);
 }
 
 /**
  * Re-use function from comment module.
  */
 function theme_spam_comment_admin_overview($form) {
-  return (theme_comment_admin_overview($form));
+  return theme('comment_admin_overview', $form);
 }
 
+/**
+ * Scan comment content before it is posted into the database.
+ */
+function comment_spam_scan($form, &$form_state) {
+  if ($form_state['clicked_button']['#value'] == t('Save')) {
+    $comment = $form['#post'];
+    $_SESSION['spam_form'] = $form;
+    spam_scan($comment, 'comment');
+  }
+  else if (isset($_SESSION['spam_form'])) {
+    unset($_SESSION['spam_form']);
+  }
+}

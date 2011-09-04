@@ -118,7 +118,9 @@ DruTeX has an own submodule system, alldefined in drutex.module. modules/drutex/
 To test if a submodule is marked active in a given input format, use drutex_submodule_is_active(), e.g. drutex_submodule_is_active('security', $format).
 
 
-6. Author
+6. Authors
 ---------
 
+* Steven Jones (steven.jones@computerminds.co.uk)
 * Daniel Gutekunst (dfg@d-f-g.net)
+

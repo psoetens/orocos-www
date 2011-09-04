@@ -20,6 +20,20 @@
       </xsl:copy>
    </xsl:template>
 
+<!--  
+  Anorexic anchor tags are no good, 
+  as they compress into singletons 
+  and probably end up ruining the rendering. 
+-->
+   <xsl:template name="fattentags" match="a[@name and (not(*|text()|comment()))]">
+      <xsl:copy>
+         <xsl:copy-of select="@*" />
+         <xsl:apply-templates />
+         <xsl:comment>Empty Anchor tags are non-semantic and should be deprecated</xsl:comment>
+       </xsl:copy>
+   </xsl:template>
+
+
    <xsl:template match="*[local-name()='script']">
 <!-- 
 	general-case for script pass-through is tricky.

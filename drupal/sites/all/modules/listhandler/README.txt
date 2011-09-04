@@ -1,4 +1,4 @@
-/* $Id: README.txt,v 1.1.8.5 2008/07/26 20:15:17 philipnet Exp $ */
+/* $Id: README.txt,v 1.2 2008/08/20 18:09:24 philipnet Exp $ */
 
 
 Contents of this File

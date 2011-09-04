@@ -1,7 +1,0 @@
-21 March 2008
--------------
-New code added so that attached image nodes follow the image node settings. If
-the 'parent' node explicitly states (via mailhandler) that the node should be
-published / not published then that setting will be used instead.
-
-; $Id: CHANGELOG.txt,v 1.1.2.1 2008/03/23 22:41:18 stuartgreenfield Exp $

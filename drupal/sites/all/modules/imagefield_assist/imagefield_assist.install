@@ -1,0 +1,56 @@
+<?php
+// $Id: imagefield_assist.install,v 1.1.2.6 2009/11/23 20:56:41 lourenzo Exp $
+
+/**
+ * @file ImageField_Assist Module Installation
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function imagefield_assist_install() {
+  
+}
+
+
+/**
+ * Implementation of hook_uninstall().
+ * @todo list all variables
+ */
+function imagefield_assist_uninstall() {
+
+  variable_del('imagefield_assist_page_styling');
+  variable_del('imagefield_assist_link');
+  variable_del('imagefield_assist_all');
+  variable_del('imagefield_assist_pages');
+  variable_del('imagefield_assist_link');
+  variable_del('imagefield_assist_preview_count');
+  variable_del('imagefield_assist_max_size');
+  variable_del('imagefield_assist_popup_label');
+  variable_del('imagefield_assist_default_label');
+  variable_del('imagefield_assist_create_derivatives');
+  variable_del('imagefield_assist_default_link_behavior');
+  variable_del('imagefield_assist_default_link_url');
+  variable_del('imagefield_assist_default_insert_mode');
+  variable_del('imagefield_assist_load_title');
+  variable_del('imagefield_assist_load_description');
+  variable_del('imagefield_assist_vocabs');
+  variable_del('imagefield_assist_default_alignment');
+  variable_del('imagefield_assist_all');
+  variable_del('imagefield_assist_count');
+  variable_del('imagefield_assist_lightbox_preset');
+  $presets = imagecache_presets();
+  foreach($presets as $preset){
+    variable_del('imagefield_assist_'.$preset['presetid']); 
+  } 
+}
+
+/**
+ * Implementation of hook_update_N
+ * This function must not be removed
+ */
+function imagefield_assist_update_6200() {
+  $ret = array();
+  return $ret;
+}
+

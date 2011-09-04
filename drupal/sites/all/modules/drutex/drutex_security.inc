@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_security.inc,v 1.4 2006/09/06 04:20:08 dfg Exp $
+// $Id: drutex_security.inc,v 1.4.8.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -16,16 +16,34 @@ function drutex_security_info($format = -1) {
   return (object) array(
     'title' => t('Security restrictions'),
     'description' => t('Restricts the set of allowed LaTeX commands.'),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 20
   );
+}
+
+/**
+ * Implementation of subhook_filter_tips().
+ */
+
+function drutex_security_filter_tips($delta, $format, $long = FALSE) {
+
+  if (drutex_var_get("drutex_security_active_$format") == TRUE) {
+    $allowed_commands = drutex_var_get("drutex_security_allowedcommands_$format");
+    $allowed_environments = drutex_var_get("drutex_security_allowedenvironments_$format");
+    $text = t('Allowed commands include: %cmd', array('%cmd' => $allowed_commands));
+    $text .= '<br />'. t('Allowed environments include: %env', array('%env' => $allowed_environments));
+  }
+  else {
+    $text = '';
+  }
+  return $text;
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_security_defaults() {
-  $D['drutex_security_active'] = false;
+  $D['drutex_security_active'] = FALSE;
   $D['drutex_security_allowedcommands'] = '\atop \binom \cdot \cfrac \choose \frac \int \ln \over \sum \to';
   $D['drutex_security_allowedenvironments'] = 'align array equation equations gather matrix split';
 
@@ -54,13 +72,13 @@ function drutex_security($text, $format = -1) {
   $commands = $matches[0];
 
   foreach ($commands as $command) {
-    if (array_search($command, $allowed_commands[$format]) === false) {
-      watchdog('DruTeX', "Unallowed command (by security submodule): $command", WATCHDOG_WARNING);
-      return false;
+    if (array_search($command, $allowed_commands[$format]) === FALSE) {
+      watchdog('DruTeX', "Unallowed command (by security submodule): %cmd", array('%cmd' => $command), WATCHDOG_WARNING);
+      return FALSE;
     }
   }
 
-  return true;
+  return TRUE;
 }
 
 /**

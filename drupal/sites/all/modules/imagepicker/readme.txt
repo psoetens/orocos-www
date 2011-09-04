@@ -1,13 +1,13 @@
-Imagepicker module for Drupal 5.1
+Imagepicker module for Drupal 6.x
 
-If you'll have any questions or suggestions please contact me at
-algisimu@gmail.com
+If you have any questions or suggestions please contact me at
+http://drupal.org/user/52366
 
 This module will help you to upload images and insert them into your nodes in a
 very easy way. To set up it follow next 5 steps and you should be done.
 
 	1. Installation
-Just copy/paste whole imagepicker directory to Drupal's modules dir.
+Upload whole imagepicker directory into sites/all/modules
 Login to Drupal site with a user which has an administrative rights and go to
 Administer > Site building > Modules. Scroll down to Other modules section, you
 should now see Imagepicker module listed there. Tick it and press the button to
@@ -15,26 +15,29 @@ save configuration. Imagepicker module will create it's directory structure in
 your files directory (configurable via Administer > Site configuration > File
 system) and all images will be saved in these directories depending on the name
 of user who is uploading images.
+After installation go to Administer > Site configuration > Imagepicker and
+select your preferences and Save Configuration.
+Also remember to go to Administer > User management > Permissions and
+set up permissions according to your needs.
 
 NOTE: Once you install Imagepicker module, it is not recomended to change
 Drupal's files directory path. But if you do so, please make sure, that you will
 copy whole imagepicker directory to the new location as well.
 
 	2. Enabling imagepicker
-Only users who have the right to use Full HTML filter will be able to use
-imagepicker. This is done because Imagepicker uses some HTML, which will be
-stipped out if user will not use this filter. Users, who has the right to use
-Full HTML filter will be able to use Imagepicker instantly after installation.
-If you want to enable Imagepicker module for other users, you will have to
-reconfigure filters.
+Imagepicker uses some HTML, which will be stripped out in input formats that
+use the HTML filter. If you want to enable Imagepicker module for use with such
+input formats, you will have to reconfigure filters.
 
 	3. Configuring filters
 Go to Administer > Site configuration > Input formats. You should see a list of
-all available filter in your site. Choose Full HTML and click on the configure
-link. In the Roles fieldset select all roles you want to be able to use this
-filter and save configuration. To see these changes you will need to clear
-Drupal's menu cache, otherwise, you will see Access denied page instead of
-Imagepicker.
+all available input formats in your site. Click the configure link next to each
+input format to see if it has the HTML filter is enabled. If it has, click on the
+configure tab and add <img>, <div> and <span> to the HTML filter's
+"Allowed tags".
+
+To see these changes you will need to clear Drupal's menu cache, otherwise you
+will see Access denied page instead of Imagepicker.
 
 	4. Clearing menu cache
 Login to your site's database and truncate cache_menu table. Of course, you can
@@ -56,16 +59,16 @@ empty otherwise (this means - do not scale image), enter title and description
 for your image and press Upload button. If you have made any mistakes, you will
 see error message, or you will be redirected to 'Insert image' page otherwise.
 In 'Insert image' page just check options you want and press Insert button. You
-also can edit or delete your image here. Try using 'Browse All' tab if you want
+also can edit or delete your image here. Try using the 'Browse' tab if you want
 to use already uploaded image, find your image and click on it. Images are
-sorted by date - latest goes into the front.
+sorted by date - latest goes into the front by default, you can change this with
+the Order dropdown.
 
 NOTE: Image title will be used as image's alternative text and a title for link.
 Description will be used only in image's page (imagepicker/image/{image_id})
 
-
 	Compatibility with browsers
-I have tested this module only with Firefox 1.5, Firefox 2.0, IE6.5 and IE7. For
+I have tested this module with Firefox, IE6.5, IE7 and Safari. For
 all other browsers - try it yourself, but I think it should work with most of
 them.
 
@@ -79,3 +82,20 @@ click on the Insert image button.
 After inserting an image into tinyMCE editor (doesn't matter which browser you
 are using) your cursor will be before '</a></div>' HTML tags. This might cause
 some problems, so be aware of it.
+
+	My Imagepicker in My Account
+Imagepicker can now be accessed in My Account, this is the best place to build
+up a collection of images. Here you can create Groups and add images to one or
+more groups. There is also an Admin mode where your images are listed.
+
+	Imagepicker Administrator
+In the 2 series there is the ability for an administrator to
+view/add/edit/delete anything.
+The directories under files/imagepicker are now stored under uid. Older systems
+should still run. See the configuration tab 'Validate Files'
+
+	Imagepicker external hook
+There is now an external hook in the upload submit function,
+called 'imagepicker_upload_extra'. So other modules can do things to images.
+It passes the new image id using the Drupal function module_invoke_all().
+

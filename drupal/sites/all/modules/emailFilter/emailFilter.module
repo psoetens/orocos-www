@@ -1,0 +1,210 @@
+<?php
+// $Id: emailFilter.module,v 1.2.2.3 2009/08/31 13:58:41 philipnet Exp $
+// Author: Philip Ludlam
+
+
+/* _emailFilter_FindASafeLineToEdit
+ *   Find a safe line to edit;
+ *   either the previous line, or this one if there isn't a previous line
+ */
+function _emailFilter_FindASafeLineToEdit( $value) {
+  $ret = 0;
+
+  if ($value == 0) {
+    $ret = 0;
+  }
+  else {
+    $ret = $value - 1;
+  }
+
+  return $ret;
+}
+
+
+/* _emailFilter_NextAuthorNumber
+ *   Returns the next author number in the list, starting the sequence back at
+ *   one if need be.
+ */
+function _emailFilter_NextAuthorNumber( $value) {
+  $max = 5; // Maximum number of .EmailFilterAuthorX lines in CSS file
+  // Perform modulus arithmetic
+  // Return (remainder of (($value - 1) divided by $max) + 1
+  // i.e. a number between 1 and 5 only!
+  return (($value-1) % $max) +1;
+}
+
+
+/* Implements hook_filter
+ *   This does the main meat of the module
+ */
+function emailFilter_filter($op, $delta = 0, $format = -1, $text = '') {
+  drupal_add_css(drupal_get_path('module', 'emailFilter') .'/emailFilter.css');
+  drupal_add_js(drupal_get_path('module', 'emailFilter') .'/emailFilter.js');
+
+  /* The "list" operation provides the module an opportunity to declare both how
+   * many filters it defines and a human-readable name for each filter. Note that
+   * the returned name should be passed through t() for translation.
+   */
+
+  if ($op == 'list') {
+    return array(
+      0 => t('Alter e-mail markup to web friendly markup.'),
+      );
+  }
+
+  /* All operations besides "list" provide a $delta argument so we know which
+   * filter they refer to. We'll switch on that argument now so that we can
+   * discuss each filter in turn.
+   */
+  switch ($delta) {
+    case 0:
+      switch ($op) {
+        /* This description is shown in the administrative interface, unlike the
+         * filter tips which are shown in the content editing interface.
+         */
+        case 'description':
+          return t('Alter e-mail markup to web friendly markup.');
+
+
+        case 'prepare':
+          /* Prepare the incoming text with our placeholders
+           */
+
+          /* $text=preg_replace('/EMAILDIV/', 'E_MAILDIV_', $text);
+           * This was inherited from the previous 5.x version.
+           * What is it for?
+           */
+
+          $lines=explode("\n", $text);
+          $numoflines=count($lines);
+
+          $inquoted=FALSE;
+          $colorauthor=FALSE;
+          $author=0;
+
+          for ($i=0; $i<=$numoflines ; $i++) {
+
+            preg_match('/^(> ?)+/' , $lines[$i], $matches);
+            $count=substr_count($matches[0], '>' );
+
+            // Quoted text
+            if ($count != 0) {
+              if ($inquoted==FALSE) {
+                // Start quoted text
+                $inquoted=TRUE;
+                $j=_emailFilter_FindASafeLineToEdit( $i);
+                $lines[$j]="EmailFilterStartHideQuotedText". $lines[$j];
+              }
+            }
+            else {
+              if ($inquoted==TRUE) {
+                // Finish quoted text
+                $inquoted=FALSE;
+                $j=_emailFilter_FindASafeLineToEdit( $i);
+                $lines[$j]=$lines[$j] ."EmailFilterEndHideQuotedText";
+              }
+            }
+
+            // Color authors
+            if ($count != 0) {
+              if ($colorauthor==FALSE) {
+                // Start color author
+                $author=$count;
+                $lines[$i]="EmailFilterStartColorAuthor". _emailFilter_NextAuthorNumber($author) .":". $lines[$i];
+                $colorauthor=TRUE;
+              }
+              else {
+                // Continue color author; check for a change in the author being quoted
+                if ($count != $author) {
+                  // There has been a change in the author being quoted
+                  $lines[$i-1]=$lines[$i-1] ."EmailFilterEndColorAuthor";
+                  $author=$count;
+                  $lines[$i]="EmailFilterStartColorAuthor". _emailFilter_NextAuthorNumber($author) .":". $lines[$i];
+                }
+              }
+            }
+            else {
+              if ($colorauthor==TRUE) {
+                // Finish color author
+                $lines[$i-1]=$lines[$i-1] ."EmailFilterEndColorAuthor";
+                $colorauthor=FALSE;
+              }
+            }
+
+            // Bold
+            $lines[$i]=preg_replace('/(\*\w*\*)/', "EmailFilterStartBold$1EmailFilterEndBold", $lines[$i]);
+
+            // Italic
+            $lines[$i]=preg_replace('/(\/\w*\/)/', "EmailFilterStartItalic$1EmailFilterEndItalic", $lines[$i]);
+
+            // Underline
+            $lines[$i]=preg_replace('/(_\w*_)/', "EmailFilterStartUnderline$1EmailFilterEndUnderline", $lines[$i]);
+
+          }
+
+          // We've got to the end, so what's not been closed down?
+          if ($inquoted==TRUE) {
+            $lines[$numoflines]=$lines[$numoflines] ."EmailFilterEndHideQuotedText";
+          }
+
+          if ($colorauthor==TRUE) {
+            $lines[$numoflines]=$lines[$numoflines] ."EmailFilterEndColorAuthor";
+          }
+
+          // Return the text to its imploded nature
+          $text=implode("\n", $lines);
+          return $text;
+
+
+        case 'process':
+          /* The actual filtering is performed here. The supplied text should be
+           * returned, once any necessary substitutions have taken place.
+           */
+
+          // Bold
+          $text=preg_replace('/EmailFilterStartBold/', '<b>', $text);
+          $text=preg_replace('/EmailFilterEndBold/', '</b>', $text);
+
+          // Italic
+          $text=preg_replace('/EmailFilterStartItalic/', '<i>', $text);
+          $text=preg_replace('/EmailFilterEndItalic/', '</i>', $text);
+
+          // Underline
+          $text=preg_replace('/EmailFilterStartUnderline/', '<u>', $text);
+          $text=preg_replace('/EmailFilterEndUnderline/', '</u>', $text);
+
+          // Quoted text
+          $text=preg_replace('/EmailFilterStartHideQuotedText/', '<div class="emailFilterToggle">', $text);
+          $text=preg_replace('/EmailFilterEndHideQuotedText/', '</div>', $text);
+
+          // Color authors
+          $text=preg_replace('/EmailFilterStartColorAuthor(\d+):/', '<div class="EmailFilterAuthor$1">', $text);
+          $text=preg_replace('/EmailFilterEndColorAuthor/', '</div>', $text);
+
+
+          /* $text=preg_replace('/E_MAILDIV_/', 'EMAILDIV', $text);
+           *   This was inherited from the previous 5.x version.
+           *   What is it for?
+           */
+
+          return "<div class=\"emailFilter\">". $text ."</div>";
+      }
+      break;
+  }
+}
+
+/* Implements hook_filter_tips
+ *   The 'long' version is meant to be longer ;)
+ */
+function emailFilter_filter_tips($delta, $format, $long = FALSE) {
+switch ($delta) {
+    case 0:
+      if ($long) {
+        return t('Lines starting with ">" will be colored, text can be <b>*bolded*</b>, <i>/italicized/</i> and <u>_underlined_</u>.');
+      }
+      else {
+        return t('Lines starting with ">" will be colored, text can be <b>*bolded*</b>, <i>/italicized/</i> and <u>_underlined_</u>.');
+      }
+      break;
+  }
+}

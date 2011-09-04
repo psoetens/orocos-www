@@ -1,5 +1,5 @@
 <?php
-
+// $Id: install-htmltidy.inc,v 1.9.4.1 2009/03/14 13:41:17 dman Exp $
 /**
  * @file
  * Setup and test the availability of a binary htmltidy 
@@ -26,41 +26,43 @@
  *
  * @package coders
  * @author Dan Morrison http://coders.co.nz/
- * @version $Id: install-htmltidy.inc,v 1.7 2006/08/25 15:43:33 dman Exp $
  */
 
 /**
  * Returns true if ok, false on error. 
+ * 
  * Assigns the input message to an explanation.
  * Sets the htmltidy_apppath Drupal variable to a valid value as a side-effect.
  */
-function htmltidy_test(& $message) {
+function htmltidy_test(&$message) {
   if (extension_loaded("tidy")) {
-    // check it runs (PHP4 claims to, but doesn't)
-    @eval('$tidy = new tidy()');
-    if($tidy){
+    // Check it runs (PHP4 claims to, but doesn't)
+    // There is both an older functional (PECL) version and 
+    // an official Object-Oriented implimentation out there in the wild
+    // I only support the OO released version.
+    @eval('$tidy = new tidy();');
+    if ($tidy) {
       // looks like success
       $message = 'PHP Tidy Extension enabled OK';
       debug($message, 2);
       return TRUE;
     }
-      $message = 'PHP Tidy Extension claims to exist, but does not initialize as expected';
-      debug($message, 2);
-      // fall-through keep trying
+    $message = 'PHP Tidy Extension claims to exist, but does not initialize as expected';
+    debug($message, 2);
+    // fall-through keep trying
   }
 
   $tidypath = variable_get("htmltidy_apppath", "/usr/bin/tidy");
   if (file_exists($tidypath)) {
     debug("tidy_binary found OK at $tidypath", 2);
-  } else {
-
-    $maybepaths = array (
+  } 
+  else {
+    $maybepaths = array(
       '/bin/tidy',
       '/usr/bin/tidy',
       '/usr/local/bin/tidy',
-      foreslash(dirname(__FILE__)) . '/bin/tidy',
+      foreslash(dirname(__FILE__)) .'/bin/tidy',
     );
-
     foreach ($maybepaths as $tidypath) {
       debug("Is tidy at " . $tidypath, 2);
       if (file_exists($tidypath)) {
@@ -79,7 +81,6 @@ function htmltidy_test(& $message) {
   }
 
   debug("Tidy is available at " . $tidypath, 1);
-  variable_set("htmltidy_apppath", $tidypath);
 
   // now test it
   $command = escapeshellcmd("$tidypath -v");
@@ -88,11 +89,15 @@ function htmltidy_test(& $message) {
 
   if (!$result) {
     $message = "Found 'tidy' binary, but it didn't run right. \n$command\nfailed to respond correctly";
+    variable_del("htmltidy_apppath");
     return FALSE;
   }
 
+  // probably success
+  variable_set("htmltidy_apppath", $tidypath);
+
   debug("Looks like tidy is ready for use! " . $result, 1);
-  $message = $result;
+  $message = "Commandline tidy at $tidypath\n" . $result;
   return TRUE;
 }
 
@@ -104,51 +109,53 @@ function htmltidy_test(& $message) {
  * Tested on two different locked-down commercial hosts so far.
  * @TODO other OS?
  */
-function htmltidy_install() {
-  $wd = dirname(__FILE__) . '/';
-  print ("Installing HTMLTidy.<br/>\nWorking dir is $wd<br/>");
+function htmltidy_install_binary() {
+  $wd = dirname(__FILE__) .'/';
+  print("Installing HTMLTidy.<br/>\nWorking dir is $wd<br/>");
 
   $source = 'http://tidy.sourceforge.net/cf/tidy_linux_x86.tgz';
   $tgz = basename($source);
-  $tar = basename($tgz, '.tgz') . '.tar';
+  $tar = basename($tgz, '.tgz') .'.tar';
 
   if (!file_exists($wd . $tar)) {
-    print ("Fetching from $source <br/>");
+    print("Fetching from $source <br/>");
     system("GET $source > $wd$tgz");
   }
   if (!file_exists($wd . $tgz)) {
-    print ("Failed to fetch the remote package <br/>");
+    print("Failed to fetch the remote package <br/>");
     return FALSE;
   }
 
-  print ("We have the package :) <br/>");
+  print("We have the package :) <br/>");
 
   $command = "gunzip $wd$tgz";
-  print ("running $command  <br/>");
+  print("running $command  <br/>");
   system($command);
 
   if (!file_exists($wd . $tar)) {
-    print ("Didn't unzip, $wd$tar not created<br/>");
+    print("Didn't unzip, $wd$tar not created<br/>");
     return FALSE;
   }
 
-  print ("unzipped OK<br/>");
+  print("unzipped OK<br/>");
   $command = "cd $wd; tar -xf {$wd}$tar";
-  print ("running $command  <br/>");
+  print("running $command  <br/>");
   system($command);
 
-  $apppath = $wd . 'bin/tidy';
+  $apppath = $wd .'bin/tidy';
   if (file_exists($apppath)) {
-    print ("Unpacked the binary to '$apppath' OK! Tres cool<br/>");
+    print("Unpacked the binary to '$apppath' OK! Tres cool<br/>");
     variable_set("htmltidy_apppath", $apppath);
 
     if (htmltidy_test($message)) {
-      print ("...and it seems to work! $message");
-    } else {
-      print ("...but running it failed.<br/>\n$message\n<br/>\nMay have been the wrong OS");
+      print("...and it seems to work! $message");
+    } 
+    else {
+      print("...but running it failed.<br/>\n$message\n<br/>\nMay have been the wrong OS");
     }
 
-  } else {
-    print ("Failed to unpack binary, it should have been at '$apppath' by now");
+  } 
+  else {
+    print("Failed to unpack binary, it should have been at '$apppath' by now");
   }
 }

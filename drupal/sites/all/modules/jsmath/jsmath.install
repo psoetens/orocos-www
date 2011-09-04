@@ -1,0 +1,35 @@
+<?php
+// $Id: jsmath.install,v 1.1.2.4 2010/07/19 09:58:20 alexiswilke Exp $
+
+/**
+ * Implementation of hook_requirements().
+ */
+function jsmath_requirements() {
+  $t = get_t();
+
+  // _jsmath_library_path() is defined in the module
+  module_load_include('module', 'jsmath');
+
+  $jspath = _jsmath_library_path();
+  $requirements['jsmath_library'] = array(
+    'title' => $t('jsMath library'),
+    'value' => $jspath === FALSE
+      ? $t('which was not found')
+      : $t('which is available (@path)', array('@path', $jspath)),
+  );
+  if ($jspath === FALSE) {
+    $requirements['jsmath_library']['severity'] = REQUIREMENT_ERROR;
+    $requirements['jsmath_library']['description'] = $t('The jsMath module requires the 3rd party jsMath library which was not found. Please check the <a href="http://www.m2osw.com/doc_jsmath_installation" target="_blank">jsMath installation instructions</a> for more information.');
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function jsmath_uninstall() {
+  db_query("DELETE FROM {variable} WHERE name LIKE 'jsmath_%%'");
+}
+
+// vim: ts=2 sw=2 et syntax=php

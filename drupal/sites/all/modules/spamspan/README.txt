@@ -20,8 +20,8 @@ Installation
 
 2. Go to 'administer > modules', and enable the spamspan.module
 
-3. Go to 'administer > configuration > input formats' and enable the filter in
-   the desired input formats.
+3. Go to 'administer > site configuration > input formats' and configure the 
+   desired input formats to enable the filter.
 
 4. Rearrange the filters on the input format's 'rearrange' tab to
    resolve conflicts with other filters.  NB: To avoid problems, you

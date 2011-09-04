@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_tools.inc,v 1.2.2.3 2008/03/31 08:05:50 darthsteven Exp $
+// $Id: drutex_tools.inc,v 1.3.4.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -13,7 +13,7 @@ function drutex_tools_info($format = -1) {
   return (object) array(
     'title' => t('Toolbox'),
     'description' => t('Tools for more debugging and error logging.'),
-    'toggle' => false,
+    'toggle' => FALSE,
     'weight' => 20
   );
 }
@@ -22,8 +22,8 @@ function drutex_tools_info($format = -1) {
  * Implementation of subhook_defaults().
  */
 function drutex_tools_defaults() {
-  $D['drutex_tools_active'] = true;
-  $D['drutex_debug'] = false;
+  $D['drutex_tools_active'] = TRUE;
+  $D['drutex_debug'] = FALSE;
 
   return $D;
 }
@@ -51,7 +51,7 @@ function drutex_tools_filter_settings($format = -1) {
   $temporary_dir = drutex_var_get("drutex_dir_temporary_$format");
   $is_writable = is_writable($temporary_dir);
 
-  if ($is_writable == false) {
+  if ($is_writable == FALSE) {
     $form["drutex_check_tmpdir"] = array(
       '#type' => 'markup',
       '#value' => $div_error . t('The temporary directory (') . $temporary_dir .') isn\'t writable.'.'</div>'
@@ -70,7 +70,7 @@ function drutex_tools_filter_settings($format = -1) {
   $image_dir = drutex_var_get("drutex_dir_images_$format");
   $is_writable = is_writable($image_dir);
 
-  if ($is_writable == false) {
+  if ($is_writable == FALSE) {
     $form["drutex_check_imgdir"] = array(
       '#type' => 'markup',
       '#value' => $div_error . t('The image directory (') . $image_dir .') isn\'t writable.'.'</div>'

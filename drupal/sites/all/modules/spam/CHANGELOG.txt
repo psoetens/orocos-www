@@ -1,4 +1,78 @@
-September 29, 2008
+August 9th, 2009 (6.x-1.0)
+ - spam.module
+    o bug #531528: simplify debug logic, cleanup code
+
+August 6th, 2009 (6.x-1.0-rc1)
+ - spam.module
+    o bug #531528: add additional debug when scanning spam content
+    o bug #531528: calculate spam score even if the content has no id
+ - spam_node.inc
+    o bug #541950: scan node content before it is posted
+ - spam_comment.inc
+    o bug #541950: scan comments before they are posted
+ - spam_user.inc
+    o bug #541950: scan users before they are created
+
+August 5th, 2009
+ - custom.module
+    o bug #531524: don't alter score if no matching custom filters
+ - spam.module
+    o bug #532158: log results of filter in normal logging mode
+    o feature #539508: display link to spam logs, if existing
+ - node_age.module
+    o bug #540830: don't log nid if no nid is found
+ - spam_node.inc
+    o feature #539508: display author of filtered node
+ - spam_comment.inc
+    o feature #539508: display author of filtered comment
+
+June 21, 2009
+ - spam_comment.inc
+    o bug #351280: comment admin pages wouldn't commit changes
+
+June 17, 2009
+ - spam.module
+    o bug #351250: anonymous access for /spam/denied
+    o bug #351245: incorrect breadcrumbs in spam logs
+    o bug #351141: couldn't commit changes to content types to filter
+    o bug #352185: errors in spam feedback form
+    o bug #404694: couldn't mark as not spam in /admin/content/spam
+    o bug #494502: let spam modules use spam_theme
+ - spam_node.inc
+    o bug #352255: node_operations_(un)publish functions no longer exist
+ - spam_user.inc
+    o bug #351138: remove dependency on profile module
+ - custom.module
+    o bug #351373: failed to load custom filter
+ - content modules
+    o bug #351247: missing url, custom, node age filter admin pages
+
+June 16, 2009
+ - spam.module
+    o bug #352719: bad "not spam" link
+
+February 13, 2009
+ - spam.module
+    o bug #362106: flush cache after manually marking content spam/notspam
+    o bug #342915: bulk updates not working due to kludge-loop prevention
+
+October 13, 2008
+ - spam.module
+    o bug #320550: make spam logs accessible to 'administer spam' permission
+
+October 11, 2008
+ - custom.module
+    o bug #319866: remove reference to non-existent "extra" field
+
+October 2, 2008
+ - custom.module
+    o bug #316158: rename custom module hook which clashed with spam hook
+
+October 1, 2008
+ - duplicate.module
+    o bug #1039032: do not block users if have 'bypass filters' permission
+
+September 29, 2008 (5.x-3.0-beta1)
  - spam.module
     o move log defines to top of file, report undesired looping
  - custom.module

@@ -7,7 +7,7 @@
 <!--
    This template will take and return HTML source, 
    sans any table markup. 
-		$Id: strip_tables.xsl,v 1.1.2.2 2007/02/20 12:30:40 dman Exp $
+		$Id: strip_tables.xsl,v 1.2 2008/06/27 19:46:27 dman Exp $
 -->
 
 

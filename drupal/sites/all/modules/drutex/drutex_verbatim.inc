@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_verbatim.inc,v 1.8 2006/09/06 02:25:41 dfg Exp $
+// $Id: drutex_verbatim.inc,v 1.8.8.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -15,7 +15,7 @@ function drutex_verbatim_info($format = -1) {
   return (object) array(
     'title' => t('Numbering / Referencing'),
     'description' => t('Provide verbatim environments (these will be hidden by all further DruTeX parsing).'),
-    'toggle' => false,
+    'toggle' => FALSE,
     'weight' => 20
   );
 }
@@ -24,7 +24,7 @@ function drutex_verbatim_info($format = -1) {
  * Implementation of subhook_defaults().
  */
 function drutex_verbatim_defaults() {
-  $D['drutex_verbatim_active'] = true;
+  $D['drutex_verbatim_active'] = TRUE;
   return $D;
 }
 

@@ -6,7 +6,7 @@
  *   Rob Loach (http://www.robloach.net)
  *   Stefaan Lippens (http://drupal.org/user/41478)
  * Copyright: (c) 2007 Rob Loach (http://www.robloach.net)
- * Version: $Id: drupal5.php,v 1.1.2.1 2007/12/12 14:48:27 soxofaan Exp $
+ * Version: $Id: drupal5.php,v 1.3 2008/03/02 19:17:41 soxofaan Exp $
  * Date Started: 2007/09/27
  *
  * Drupal 5 language definition file for GeSHi
@@ -582,6 +582,9 @@ $language_data = array (
     1 => false,
     2 => false,
     3 => false,
+    4 => false,
+    5 => false,
+    6 => false,
   ),
   'STYLES' => array(
     'KEYWORDS' => array(

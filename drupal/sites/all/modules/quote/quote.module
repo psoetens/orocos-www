@@ -1,53 +1,61 @@
 <?php
-// $Id: quote.module,v 1.29.2.8 2007/08/11 19:51:20 karthik Exp $
+// $Id: quote.module,v 1.29.2.10.2.12 2010/11/13 05:42:24 karthik Exp $
 
 /**
- * Implementation of hook_help().
+ * @file
+ * The quote module provides a filter and appropriate links that allow users to
+ * quote nodes and other comments in their own comments.
  */
-function quote_help($section) {
-  switch ($section) {
-    case 'admin/settings/quote':
-      return t('<p>The quote filter allows users to quote other posts in their
-comments. Besides the following settings, the quote filter will need to be
-enabled for each <a href="!input-format">input format</a> (as required). Please
-make sure that the quote filter is arranged <em>after</em> any HTML filters and
-<em>before</em> the line break filter. For more information, please visit the
-<a href="!project-page">project page</a>.</p>', array('!input-format' => url('admin/settings/filters'), '!project-page' => url('http://drupal.org/project/quote', NULL, NULL, TRUE)));
-  }
-}
 
 /**
  * Implementation of hook_menu().
  */
-function quote_menu($may_cache) {
+function quote_menu() {
   $items = array();
 
-  if ($may_cache) {
-    $items[] = array(
-      'path' => 'admin/settings/quote',
-      'title' => t('Quote'),
-      'callback' => 'drupal_get_form',
-      'callback arguments' => 'quote_settings_form',
-      'access' => user_access('administer filters')
-    );
-  }
-  else {
-    // Reference quote.css, if it exists.
-    drupal_add_css(drupal_get_path('module', 'quote') .'/quote.css');
-  }
+  $items['admin/settings/quote'] = array(
+    'title' => 'Quote',
+    'description' => 'Configure the behaviour of the quote module.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('quote_settings_form'),
+    'access arguments' => array('administer filters'),
+    'file' => 'quote.admin.inc'
+  );
 
   return $items;
 }
 
 /**
+ * Implementation of hook_theme().
+ */
+function quote_theme() {
+  return array(
+    'quote' => array(
+      'arguments' => array(
+        'quote_content' => NULL,
+        'quote_author' => NULL
+      )
+    )
+  );
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function quote_init() {
+  // Reference quote.css, if it exists.
+  drupal_add_css(drupal_get_path('module', 'quote') .'/quote.css');
+}
+
+/**
  * Implementation of hook_link().
  */
-function quote_link($type, $post = 0, $main = 0) {
+function quote_link($type, $post, $teaser = FALSE) {
   $links = array();
 
   if (user_access('post comments')) {
     $link = array(
-      'title' => t('quote'),
+      'title' => t('Quote'),
       'attributes' => array('title' => t('Quote this post in your reply.')),
       'query' => 'quote=1',
       'fragment' => 'comment-form'
@@ -56,9 +64,10 @@ function quote_link($type, $post = 0, $main = 0) {
     if ($type == 'comment') {
       // Display quote link for comments only if the parent node is accepting
       // comments and has the quote filter enabled.
-      $node = node_load(arg(1));
+      $node = menu_get_object();
       if (in_array($node->type, _quote_variable_get('node_types')) && $node->comment == COMMENT_NODE_READ_WRITE) {
         $link['href'] = "comment/reply/$post->nid/$post->cid";
+        $link['title'] = t('quote');
         $links['quote'] = $link;
       }
     }
@@ -76,8 +85,9 @@ function quote_link($type, $post = 0, $main = 0) {
 /**
  * Implementation of hook_form_alter().
  */
-function quote_form_alter($form_id, &$form) {
-  if ($form_id == 'comment_form' && isset($_GET['quote']) && $_GET['quote']) {
+function quote_form_alter(&$form, &$form_state, $form_id) {
+  // The explanation for the $_POST check is further below.
+  if ($form_id == 'comment_form' && (isset($_POST['quote']) || isset($_GET['quote']) && $_GET['quote'])) {
     $nid = arg(2);
     $cid = arg(3);
 
@@ -91,7 +101,6 @@ function quote_form_alter($form_id, &$form) {
         $author = (!empty($comment->name)) ? $comment->name : variable_get('anonymous', 'Anonymous');
       }
       $quote = $comment->comment;
-      $subject = $comment->subject;
     }
     elseif ($nid && _quote_variable_get('node_link_display')) {
       $node = node_load(array('nid' => $nid));
@@ -106,11 +115,20 @@ function quote_form_alter($form_id, &$form) {
     else {
       return;
     }
+
     // Add quoted text and preserve existing content (signature etc.).
-    $form['comment_filter']['comment']['#default_value'] = '[quote='. $author .']'. $quote ."[/quote]\n". $form['comment_filter']['comment']['#default_value'];
+    $form['comment_filter']['comment']['#default_value'] = '[quote='. $author .']'. trim($quote) ."[/quote]\n". $form['comment_filter']['comment']['#default_value'];
+
     if (_quote_variable_get('subject_required')) {
       $form['subject']['#required'] = TRUE;
     }
+
+    // The Form API, by default, drops name-value pairs from the form's action
+    // URL (besides ?q=). Manually adding it back in as a hidden element.
+    $form['quote'] = array(
+      '#type' => 'hidden',
+      '#value' => 1
+    );
   }
 }
 
@@ -122,7 +140,7 @@ function quote_filter($op, $delta = 0, $format = -1, $text = '') {
     case 'list':
       return array(0 => t('Quote filter'));
     case 'description':
-      return t('Converts [quote] tags into &lt;div&gt; tags. Must apply after HTML filters.');
+      return t('Converts [quote] tags into &lt;div&gt; tags. Must usually apply after HTML filters unless an exception is made for &lt;div&gt; tags.');
     case 'process':
       return _quote_filter_process($text);
     default:
@@ -135,73 +153,41 @@ function quote_filter($op, $delta = 0, $format = -1, $text = '') {
  */
 function quote_filter_tips($delta, $format, $long = FALSE) {
   if ($long) {
-    return t('
-      <p>Quoted content can be placed between [quote] tags in order to be displayed as an indented quote. Every [quote] tag <em>must</em> have a corresponding [/quote] tag. For example:
-      <pre>[quote]This is a simple quote.[/quote]</pre> is displayed as:</p>
-      <div class="quote-msg"><div class="quote-author">Quote:</div>This is a simple quote.</div>
-      <p>Additionally, there is an optional attribute which allows quotes to specify the original author.
-      <pre>[quote=Mr. Drupal]This is a quote with an attribution line.[/quote]
-      </pre> is displayed as:</p>
-      <div class="quote-msg"><div class="quote-author">Mr. Drupal wrote:</div>This is a quote with an attribution line.</div>
-      <p>Finally, multiple [quote] tags can be nested within one another. Just remember that every [quote] tag <strong>must</strong> have a corresponding [/quote] tag.
-      <pre>
-      [quote]I think she says it best...
-      [quote=Ms. Quotation]This is a quote nested within another quote.[/quote]
-      but you can\'t argue with
-      [quote=Ms. Reply]The more quotes, the merrier.
-      Just don\'t get too carried away.[/quote]
-      And I have nothing more to say.[/quote]</pre> is displayed as:</p>
-      <div class="quote-msg"><div class="quote-author">Quote:</div>I think she says it best...
-      <div class="quote-msg"><div class="quote-author">Ms. Quotation wrote:</div>This is a quote nested within another quote.</div>
-      but you can\'t argue with
-      <div class="quote-msg"><div class="quote-author">Ms. Reply wrote:</div>The more quotes, the merrier. Just don\'t get too carried away.</div>
-      And I have nothing more to say.</div>
-    ');
+    // These string are wrapped in <pre> tags.
+    $simple_quote = '[quote]This is a simple quote.[/quote]';
+    $attributed_quote = '[quote=Mr. Drupal]This is a quote with an attribution line.[/quote]';
+    $nested_quote = '[quote]I think she says it best...
+[quote=Ms. Quotation]This is a quote nested within another quote.[/quote]
+but you can\'t argue with
+[quote=Ms. Reply]The more quotes, the merrier.
+Just don\'t get too carried away.[/quote]
+And I have nothing more to say.[/quote]';
+    return t('<p>Quoted content can be placed between [quote] tags in order to
+      be displayed as an indented quote. Every [quote] tag <em>must</em> have a
+      corresponding [/quote] tag. For example:
+      <pre>!simple-quote</pre> is displayed as:</p>
+      !simple-quote-processed
+      <p>Additionally, there is an optional attribute which allows quotes to
+      specify the original author.
+      <pre>!attributed-quote</pre> is displayed as:</p>
+      !attributed-quote-processed
+      <p>Finally, multiple [quote] tags can be nested within one another. Just
+      remember that every [quote] tag <strong>must</strong> have a corresponding
+      [/quote] tag.
+      <pre>!nested-quote</pre> is displayed as:</p>
+      !nested-quote-processed', array(
+        '!simple-quote' => $simple_quote,
+        '!simple-quote-processed' => _quote_filter_process($simple_quote),
+        '!attributed-quote' => $attributed_quote,
+        '!attributed-quote-processed' => _quote_filter_process($attributed_quote),
+        '!nested-quote' => $nested_quote,
+        '!nested-quote-processed' => _quote_filter_process($nested_quote)
+      )
+    );
   }
   else {
     return t('You may quote other posts using [quote] tags.');
   }
-}
-
-/**
- * Menu callback: quote module settings form.
- */
-function quote_settings_form() {
-  $form['quote'] = array(
-    '#type' => 'fieldset',
-    '#title' => 'Quote module settings',
-    '#tree' => TRUE
-  );
-  $form['quote']['node_types'] = array(
-    '#type' => 'checkboxes',
-    '#title' => t('Node associations'),
-    '#description' => t('Select the node types to associate with the quote filter.'),
-    '#options' => _quote_get_node_types(),
-    '#default_value' => _quote_variable_get('node_types')
-  );
-  $form['quote']['node_link_display'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Display the quote link for nodes'),
-    '#description' => t('Leave this option disabled if you use a PHP or similar filter in your nodes. The quote link is always displayed for comments.'),
-    '#default_value' => _quote_variable_get('node_link_display')
-  );
-  $form['quote']['subject_required'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Make the comment subject field a required field'),
-    '#description' => t('Making the comment subject field a required field will ensure that unsightly [quote] tags are not displayed.'),
-    '#default_value' => _quote_variable_get('subject_required')
-  );
-
-  return system_settings_form($form);
-}
-
-/**
- * Validate quote settings form submission.
- */
-function quote_settings_form_validate($form_id, $form_values, $form) {
-  // Run the node type checkboxes through array_filter to strip unselected
-  // items.
-  form_set_value($form['quote']['node_types'], array_filter($form_values['quote']['node_types']));
 }
 
 /**
@@ -229,29 +215,6 @@ function _quote_variable_get($name = NULL) {
 }
 
 /**
- * Replace [quote] tags with markup for display.
- *
- * @param $text
- *   The text with the [quote] tags that need to be replaced with HTML tags.
- *
- * @return $text
- *   Filtered text.
- *
- * @todo Fix this with one preg_replace.
- */
-function _quote_filter_process($text) {
-  // Thanks: function based on code from punbb.org
-  if (strstr($text, '[quote')) {
-    $pre = '<div class="quote-msg"><div class="quote-author">';
-    $post = '</div>';
-    $markup = $pre . t('Quote:') . $post;
-    $text = str_replace(array('[quote]', '[quote=]', '[/quote]'), array($markup, $markup, $post), $text);
-    $text = preg_replace('#\[quote=(?:"|\')?(.*?)["\']?(?:"|\')?\]#s', $pre . t('%name wrote:', array('%name' => '\\1')) . $post, $text);
-  }
-  return $text;
-}
-
-/**
  * Helper function that returns node types.
  */
 function _quote_get_node_types($keys = FALSE) {
@@ -265,4 +228,68 @@ function _quote_get_node_types($keys = FALSE) {
   }
 
   return array_keys($node_types);
+}
+
+/**
+ * Replace [quote] tags with markup for display.
+ *
+ * @param $text
+ *   The text with the [quote] tags that need to be replaced with HTML tags.
+ *
+ * @return $text
+ *   Filtered text.
+ */
+function _quote_filter_process($text) {
+  if (stristr($text, '[quote')) {
+    // Single regexp with callback allowing for theme calls and quote
+    // nesting/recursion with regexp code from
+    // http://de.php.net/manual/en/function.preg-replace-callback.php#85836
+    $text = preg_replace_callback('#\[(quote.*?)]((?>\[(?!/?quote[^[]*?])|[^[]|(?R))*)\[/quote]#is', '_quote_filter_process_callback', $text);
+  }
+
+  return $text;
+}
+
+/**
+ * Generate and return the quote theming for a quote occurence found by
+ * _quote_filter_process.
+ *
+ * @param $matches
+ *   The RegExp matches (for author and quote) found in _quote_filter_process.
+ *
+ * @return $output_quote
+ *   Themed quote.
+ */
+function _quote_filter_process_callback($matches) {
+  $quote_author = trim(substr($matches[1], 6));
+  $quote_content = _quote_filter_process($matches[2]);
+
+  $quote_output = theme('quote', $quote_content, $quote_author);
+
+  return $quote_output;
+}
+
+/**
+ * Theme a quote with its content and author - default theme function.
+ *
+ * @param $quote_content
+ *   The quote's string content.
+ * @param $quote_author
+ *   The quote author's name.
+ *
+ * @return $output_quote
+ *   Themed quote.
+ */
+function theme_quote($quote_content, $quote_author) {
+  $quote_output = '<div class="quote-msg">';
+  if ($quote_author != '') {
+    $quote_output .= '<div class="quote-author">'. t('%name wrote:', array('%name' => $quote_author)) .'</div>';
+  }
+  else {
+    $quote_output .= '<div class="quote-author">'. t('Quote:') .'</div>';
+  }
+  $quote_output .= $quote_content;
+  $quote_output .= '</div>';
+
+  return $quote_output;
 }

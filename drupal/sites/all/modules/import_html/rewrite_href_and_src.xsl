@@ -19,7 +19,14 @@
 	even discarding the suffix. If so, set replace_suffix to true, and tell me the new suffix.
 	replace_suffix = TRUE and new_suffix = '' means discard suffixes altogether (just hrefs, not srcs)
 
-	$Id: rewrite_href_and_src.xsl,v 1.7.2.1 2007/02/20 12:30:40 dman Exp $
+  [site|src]_root are what the links are being rewritten TO
+  [site|src]_base are what the links are being rewritten FROM
+  Very basically, replace 'base' with 'root' and see what happens
+
+  In the process of scanning every a href in the doc, it also discards any stray
+  target attributes. Because HTML Tidy failed to :-/
+
+	$Id: rewrite_href_and_src.xsl,v 1.12 2008/12/10 05:52:43 dman Exp $
 -->
 
 
@@ -29,13 +36,18 @@
 	xmlns="http://www.w3.org/1999/xhtml"
 >
 <!--
-	output must be set to be XML compliant, else the meta and link tags
+	Output must be set to be XML compliant, else the meta and link tags
 	(unclosed singletons in old HTML) will not validate on the next pass.
 -->
 	<xsl:output method="xml" encoding="UTF-8" />
 
-	<xsl:param name="href_base">thebase</xsl:param>
+  <xsl:param name="site_root">/</xsl:param>
+  <xsl:param name="src_root">/files/imported</xsl:param>
+
+  <xsl:param name="href_base">thebase</xsl:param>
 	<xsl:param name="src_base">thesrc</xsl:param>
+
+  <xsl:param name="full_url_root">http://example.com/</xsl:param>
 
 	<xsl:param name="replace_suffix"></xsl:param>
 	<xsl:param name="new_suffix">.newhtm</xsl:param>
@@ -63,20 +75,35 @@ PHP4 just breaks for some reason
 				Should use ends-with, but sablotron doesn't play that.
 				This needs work and may cause problems.
 			-->
-			<xsl:with-param name="linkbase">
-				<xsl:choose>
-					<xsl:when test="contains(@href,'.htm') or contains(@href,'.php') or contains(@href,'.asp') or contains(@href,'.jsp') ">
-							<xsl:value-of select="$href_base" />
-					</xsl:when>
-					<xsl:when test="(substring(@href, string-length(@href) ) = '/' ) or not( contains(@href,'.'))">
-						<!-- aka ends-with('/') --> 
-						<xsl:value-of select="$href_base" />
-					</xsl:when>
-					<xsl:otherwise>
-						<xsl:value-of select="$src_base" />
-					</xsl:otherwise>
-				</xsl:choose>
-			</xsl:with-param>
+      <xsl:with-param name="linkbase">
+        <xsl:choose>
+          <xsl:when test="contains(@href,'.htm') or contains(@href,'.php') or contains(@href,'.asp') or contains(@href,'.jsp') ">
+            <xsl:value-of select="$href_base" />
+          </xsl:when>
+          <xsl:when test="(substring(@href, string-length(@href) ) = '/' ) or not( contains(@href,'.'))">
+            <!-- ends-with('/') or has no suffix - also assumed to be a normal page --> 
+            <xsl:value-of select="$href_base" />
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="$src_base" />
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+
+      <xsl:with-param name="linkroot">
+        <xsl:choose>
+          <xsl:when test="contains(@href,'.htm') or contains(@href,'.php') or contains(@href,'.asp') or contains(@href,'.jsp') ">
+              <xsl:value-of select="$site_root" />
+          </xsl:when>
+          <xsl:when test="(substring(@href, string-length(@href) ) = '/' ) or not( contains(@href,'.'))">
+            <!-- aka ends-with('/') --> 
+            <xsl:value-of select="$site_root" />
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="$src_root" />
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
 
 			<xsl:with-param name="replace_suffix">
 				<xsl:choose>
@@ -97,7 +124,8 @@ PHP4 just breaks for some reason
    <xsl:template name="rewritesrcs" match="node()[@src]">
 		<xsl:call-template name="rewritelink">
 			<xsl:with-param name="attname">src</xsl:with-param>
-			<xsl:with-param name="linkbase"><xsl:value-of select="$src_base" /></xsl:with-param>
+      <xsl:with-param name="linkbase"><xsl:value-of select="$src_base" /></xsl:with-param>
+      <xsl:with-param name="linkroot"><xsl:value-of select="$src_root" /></xsl:with-param>
 		</xsl:call-template>
    </xsl:template>
 
@@ -106,6 +134,7 @@ PHP4 just breaks for some reason
 		<xsl:call-template name="rewritelink">
 			<xsl:with-param name="attname">background</xsl:with-param>
 			<xsl:with-param name="linkbase"><xsl:value-of select="$src_base" /></xsl:with-param>
+      <xsl:with-param name="linkroot"><xsl:value-of select="$src_root" /></xsl:with-param>
 		</xsl:call-template>
    </xsl:template>
  
@@ -118,9 +147,46 @@ PHP4 just breaks for some reason
 		<xsl:call-template name="rewritelink">
 			<xsl:with-param name="attname">value</xsl:with-param>
 			<xsl:with-param name="linkbase"><xsl:value-of select="$src_base" /></xsl:with-param>
+      <xsl:with-param name="linkroot"><xsl:value-of select="$src_root" /></xsl:with-param>
 		</xsl:call-template>
    </xsl:template>
 
+
+  <xsl:template name="rewriteimports" match="xhtml:style">
+    <!-- Damn. Time for some string replacement -->
+    <!-- This only works on clear quoted root-relative imports right now. css is rarely fully relative? -->
+    <xsl:copy>
+      <xsl:call-template name="replace">
+        <xsl:with-param name="string" select="text()" />
+        <xsl:with-param name="search" >import "/</xsl:with-param>
+        <xsl:with-param name="replace" >import "<xsl:value-of select="$src_root"/></xsl:with-param>
+      </xsl:call-template>
+    </xsl:copy>
+  </xsl:template>
+
+  <!-- Boring having to reinvent the wheel here. The long way. -->
+	<xsl:template name="replace">
+	  <xsl:param name="string" />
+	  <xsl:param name="search" />
+	  <xsl:param name="replace" />
+	
+	  <xsl:choose>
+	    <xsl:when test="contains($string, $search)">
+	      <xsl:value-of select="substring-before($string, $search)" />
+	      <xsl:value-of select="$replace" />
+	      <xsl:call-template name="replace">
+          <xsl:with-param name="string"
+            select="substring-after($string, $search)" />
+	        <xsl:with-param name="search" select="$search" />
+	        <xsl:with-param name="replace" select="$replace" />
+	      </xsl:call-template>
+
+	    </xsl:when>
+	    <xsl:otherwise>
+	      <xsl:value-of select="$string" />
+	    </xsl:otherwise>
+	  </xsl:choose>
+	</xsl:template>
 
 
 <!-- 
@@ -129,8 +195,11 @@ PHP4 just breaks for some reason
  -->
    <xsl:template name="rewritelink">
 	   <xsl:param name="attname" />
-	   <xsl:param name="linkbase" />
-	   <xsl:param name="replace_suffix" />
+     <!-- use for relative links  -->
+     <xsl:param name="linkbase" ><xsl:value-of select="$src_base" /></xsl:param>
+     <!-- use for root-relative links -->
+     <xsl:param name="linkroot" ><xsl:value-of select="$src_root" /></xsl:param>
+     <xsl:param name="replace_suffix" />
 	<xsl:copy>
 		
 		<xsl:for-each select="@*" >
@@ -138,7 +207,7 @@ PHP4 just breaks for some reason
 
 				<xsl:when test="name()=$attname">
 				
-					<!-- these ARE the droids you are looking for -->
+					<!-- These ARE the droids you are looking for -->
 					<xsl:choose>
 
 						<xsl:when test="not(contains(.,':')) and not(starts-with(.,'/')) and not(starts-with(.,'#'))">
@@ -146,31 +215,38 @@ PHP4 just breaks for some reason
 					       It has no scheme, and is doesn't start with /
 					       It's a partial Url, may need help being relative
 					       Rewrite it
-				        -->
+				       -->
 							<xsl:attribute name="{$attname}">
 							<xsl:value-of select="$linkbase" />
-
-							<!-- Also, trim the suffix off this file and 
-							     replace it on-the-fly, if asked to.
-							    Cannot really handle query strings, hashes or anything
-							-->
-							<xsl:choose>
-                <!-- testing against the input $replace_suffix flag parameter still returns TRUE if given '0'. Bool got cast into string somewhere  -->
-								<xsl:when test="number($replace_suffix) and substring-before( . ,'.')">
-								<!-- currently broken if path starts with (or contains?) "." -->
-									<xsl:value-of select="substring-before( . ,'.')" /><xsl:value-of select="$new_suffix" />
-								</xsl:when>
-								<xsl:otherwise>
-									<xsl:value-of select="." />
-								</xsl:otherwise>
-							</xsl:choose>
-
+              <xsl:call-template name="replace_suffix"><xsl:with-param name="path"><xsl:value-of select="." /></xsl:with-param></xsl:call-template>
 							</xsl:attribute>
-				
 						</xsl:when>
+
+            <xsl:when test="starts-with(., '/')" >
+              <!-- 
+                This link DOES start with / . 
+                Prepend the given linkroot. 
+                --> 
+              <xsl:attribute name="{$attname}">
+               <xsl:value-of select="$linkroot" />
+               <xsl:call-template name="replace_suffix"><xsl:with-param name="path"><xsl:value-of select="substring( . ,2)" /></xsl:with-param></xsl:call-template>
+              </xsl:attribute>
+            </xsl:when>
+
+            <xsl:when test="starts-with(.,$full_url_root)" >
+              <!-- remove host from self-referential URLs -->
+              <xsl:attribute name="{$attname}">
+               <xsl:value-of select="$linkroot" />
+               <xsl:value-of select="substring-after( . , $full_url_root)" />
+              </xsl:attribute>
+            </xsl:when>
+
+
 						<xsl:otherwise>
 						<!-- 
-							Full Url, it defines its own scheme, leave as is 
+							Full Url or unknown link type, 
+              it defines its own scheme, leave as is 
+              TODO: remove host from self-referential URLs
 						-->
 							<xsl:copy-of select="." />
 							<xsl:apply-templates select=" * | text()"/>
@@ -182,13 +258,16 @@ PHP4 just breaks for some reason
 					<!-- 
 						It's one of the other attributes
 						Copy all and carry on 
+						UNLESS it's 'target' which is deprecated but html tidy still hasn't killed for us
 					-->
-					<xsl:copy />
+					<xsl:if test="not( name() = 'target')" >
+  					<xsl:copy />
+ 					</xsl:if>
 				</xsl:otherwise>
 			</xsl:choose>
 		</xsl:for-each>
 		<!-- 
-		  done attributes, needs to carry on with the contents 
+		  Done attributes, needs to carry on with the contents 
 		-->
 			<xsl:apply-templates />
 
@@ -196,7 +275,24 @@ PHP4 just breaks for some reason
 
    </xsl:template>
 	     
-
+   <xsl:template name="replace_suffix">
+      <!-- 
+        Trim the suffix off thie given argument (file path) and 
+        replace it on-the-fly, if asked to.
+        Cannot really handle query strings, hashes or anything
+      -->
+     <xsl:param name="path" />
+      <xsl:choose>
+        <!-- testing against the input $replace_suffix flag parameter still returns TRUE if given '0'. Bool got cast into string somewhere  -->
+        <xsl:when test="number($replace_suffix) and substring-before( $path ,'.')">
+        <!-- currently broken if path starts with (or contains?) "." -->
+          <xsl:value-of select="substring-before( $path ,'.')" /><xsl:value-of select="$new_suffix" />
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:value-of select="$path" />
+        </xsl:otherwise>
+      </xsl:choose>
+   </xsl:template>
 
 <!-- Identity transformation template - let everything else pass through  -->
    <xsl:template match=" * | comment() | processing-instruction() | text()">
@@ -208,11 +304,26 @@ PHP4 just breaks for some reason
       </xsl:copy>
    </xsl:template>
 
+
+<!--  
+  Anorexic anchor tags are no good, 
+  as they compress into singletons 
+  and probably end up ruining the rendering. 
+
+   <xsl:template name="fattentags" match="a[@name and (not(*|text()|comment()))]">
+      <xsl:copy>
+         <xsl:copy-of select="@*" />
+         <xsl:apply-templates />
+         <xsl:comment>Empty Anchor tags are non-semantic and should be deprecated</xsl:comment>
+       </xsl:copy>
+   </xsl:template>
+-->   
+   
    <xsl:template match="*[local-name()='script']">
 <!-- 
- general-case for script pass-through is tricky.
- Note, this match is LESS specific than the one that matches all src-ed elements
- so a script src='' thing is NOT touched here, only inline code blocks.
+  General-case for script pass-through is tricky.
+  Note, this match is LESS specific than the one that matches all src-ed elements
+  so a script src='' thing is NOT touched here, only inline code blocks.
  -->
      <xsl:if test="not(number($strip_script_tags))">
       <xsl:copy>

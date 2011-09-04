@@ -1,4 +1,10 @@
 <?php
+// $Id: custom-upgrade.inc,v 1.1.2.2.2.1 2008/12/25 05:42:10 jeremy Exp $
+
+/**
+ * @file
+ * Custom Upgrade include file.
+ */
 
 define(SPAM_CUSTOM_PLAIN, 0);
 define(SPAM_CUSTOM_REGEX, 1);
@@ -49,8 +55,7 @@ function custom_upgrade() {
           $status = SPAM_CUSTOM_STATUS_SPAM;
           break;
       }
-      if ($old->action & SPAM_CUSTOM_ACTION_HEADER || 
-          $old->action & SPAM_CUSTOM_ACTION_BODY) {
+      if ($old->action & SPAM_CUSTOM_ACTION_HEADER || $old->action & SPAM_CUSTOM_ACTION_BODY) {
         $scan = SPAM_CUSTOM_SCAN_CONTENT;
       }
       else {
@@ -60,7 +65,8 @@ function custom_upgrade() {
       db_query("INSERT INTO {spam_custom} (filter, style, status, scan, matches, last) VALUES('%s', %d, %d, %d, %d, %d)", $old->filter, $style, $status, $scan, $old->matches, $old->last);
     }
     // Done with upgrade, drop old table.
-    db_query('DROP TABLE {old_spam_custom}');
+    $ret = array();
+    db_drop_table($ret, 'old_spam_custom');
   }
 }
 

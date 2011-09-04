@@ -1,4 +1,5 @@
 <?php
+// $Id: tidy-functions.inc,v 1.23.2.6 2009/05/17 15:12:46 dman Exp $
 /**
  * @file
  * Pass HTMLTidy over some inputs to make them valid XHTML
@@ -13,10 +14,11 @@
  *
  * @package coders
  * @author Dan Morrison http://coders.co.nz/
- * @version $Id: tidy-functions.inc,v 1.16.2.1 2007/02/20 12:30:40 dman Exp $
  */
 
-@require_once('debug.inc');
+@module_load_include('inc', 'import_html', 'coders_php_library/debug');
+
+define("TIDY_OPTIONS", " -q -config ". foreslash( dirname(__FILE__) ."/xhtml_tidy.conf ") );
 
 /**
  * Use the tidy extension (Whee!) to fix randomly downloaded 'html'
@@ -30,56 +32,87 @@
  * document, and later xhtml imports will work without bogus namespace tags.
  * @return $string Cooked web page source
  */
-function xml_tidy_string($data,$xhtml=TRUE) {
-  // Because HTML character entities should have been properly declared (but naturally are not) &nbsp; and friends will cause complaints.
-  // Decode them, then let tidy re-encode them as XML-friendly _numerical_ entities; Dunno if there's a tidy option to re-convert already encoded entities.
-  $data = html_entity_decode( $data ) ;
+function xml_tidy_string($data, $xhtml = TRUE) {
+
+  $tidy_conf = dirname(__FILE__) .'/xhtml_tidy.conf';
 
   // Tidy
-  if ( extension_loaded( "tidy" ) && function_exists('tidy') ) {
+  if ( extension_loaded('tidy') ) {
+    // There are two conflicting tidy extensions. v2 is PHP5 and OO
+    // v1 was PHP4 and broken
+    // One reads from a conf file, one only takes params
+
     // Specify configuration
     // The DOCTYPE syntax seems to cause complaints
     // <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
     // is apparently illegal ? Need to omit it. Wants space inside the end of the tag ...
     // The xml declaration also causes trouble with browser rendering.
     //
+
     $config = array(
-       'indent'           => true,
-       'output-xml'       => true,
-       'numeric-entities' => true,
-       'add-xml-decl'     => false,
+       'indent'           => FALSE,
+       'output-xhtml'     => TRUE,
+       'numeric-entities' => TRUE,
+       'add-xml-decl'     => FALSE,
        'doctype'          => 'omit',
        'char-encoding'    => 'utf8',
-       'wrap'             => 200,
+       'wrap'             => 2000,
        'repeated-attributes' => 'keep-last',
+       'alt-text'         => '',
+#       'drop-font-tags'   => TRUE,
     );
-    if($xhtml){$config['output-xhtml'] = true; }
-    
+    if ($xhtml) {
+      $config['output-xhtml'] = TRUE; 
+    }
 
-    $tidy = new tidy();
-    $tidy->parseString($data, $config);
-    $tidy->cleanRepair();
-    return (string)tidy_get_output($tidy) ;
+    // Finally a character entity decoder that does what I needed!
+    // If the source file contains (illegal) high-order bytes, convert 
+    // them to numeric entities. Even tidy_html wasnt doing it right.
+    if (function_exists('charset_decode_utf_8')) { 
+      $data = charset_decode_utf_8($data);
+    }
+
+    if (class_exists('tidy')) {
+      debug('Using tidy Extension (v2 OO)', 2);
+      
+      // this doesnt work. How to get conf files into tidy v2?
+      // ini_set('tidy.default_config', $tidy_conf);
+  
+      $tidy = new tidy();
+      $tidy->parsestring($data, $config);
+      $tidy->cleanrepair();
+      return (string)tidy_get_output($tidy) ;
+    }
+
+    if (function_exists('tidy_parse_string')) {
+      // Untested
+      debug('Using tidy Extension (v1, PECL)', 2);
+      if (function_exists('tidy_parse_string')) { 
+        tidy_load_config($tidy_conf);
+      }
+      $tidy = tidy_parse_string($data, $config);
+      $tidy->cleanrepair();
+      return (string)$tidy ;
+    }
   }
 
- // No Tidy Module, go commando
-
-  debug("No PHP tidy support, attempting to use the command-line way to process a string. This is pretty hokey!",2);
+  // No Tidy Module, go commando
+  import_html_debug("No PHP tidy support, attempting to use the command-line way to process a string.");
   // Need to write, pipe & read the result.
-  $temp_path =  foreslash( tempnam($_ENV['TEMP'],"htm") );
+  $temp_path =  foreslash( tempnam($_ENV['TEMP'], "htm") );
 
-  file_put_contents($temp_path,$data);
-  if(! file_exists($temp_path)){
+  file_put_contents($temp_path, $data);
+  if (! file_exists($temp_path)) {
     trigger_error("Failed to create/write temp file '$temp_path'");
     return FALSE;
   }
   $out = xml_tidy_file($temp_path);
-  if(! DEBUGLEVEL){ unlink($temp_path); }
+  if (! DEBUGLEVEL) unlink($temp_path);
 
-  if($out){
+  if ($out) {
     return $out;
   }
-  debug("No html tidy support at all. Trying to tidy returned null. You need to enable the PHP module to use this, or ensure the 'tidy' executable is present and defined as TIDY_PATH and use that",2);
+  import_html_debug("No html tidy support at all. Trying to tidy returned null. You need to enable the PHP module to use this, or ensure the 'tidy' executable is present and defined as TIDY_PATH and use that", WATCHDOG_ERROR);
   return $data;
 }
 
@@ -96,72 +129,71 @@ function xml_tidy_string($data,$xhtml=TRUE) {
  * @returns string the content of the tidied file
  */
 function xml_tidy_file($filepath) {
-  debug("Tidying file '$filepath' ",2);
+  import_html_debug("Tidying file '$filepath' ");
 
-  if(! is_local($filepath)){
+  if (! is_local($filepath)) {
     // OK, so it's a remote file and I have to process it on the command-line ...
     // Copy it down
     $source = file_get_contents($filepath);
-    if(! $source){
-      trigger_error("No content from '$filepath'", E_USER_WARNING ); return false;
+    if (! $source) {
+      trigger_error("No content from '$filepath'", E_USER_WARNING ); 
+      return FALSE;
     }
-    debug("Retrieved remote file:$filepath is ".strlen($source)." big",3);
+    import_html_debug("Retrieved remote file:$filepath is ". strlen($source) ." big");
     // put it in a temp place
-    $target_path =  tempnam($_ENV['TEMP'],"htm");
-
+    $target_path =  tempnam($_ENV['TEMP'], "htm");
     file_put_contents( foreslash($target_path) , $source );
-  } else {
+  } 
+  else {
     $target_path = $filepath;
   }
 
-  if(! file_exists($target_path) ){
-    debug("Attempted to tidy a file that doesnt exist. Looking for $target_path failed!");
+  if (! file_exists($target_path) ) {
+    import_html_debug("Attempted to tidy a file that doesn't exist. Looking for $target_path failed!", array(), WATCHDOG_ERROR);
     return;
   }
 
-
-  if(! $htmltidy_apppath = variable_get("htmltidy_apppath", '')){
+  if (! $htmltidy_apppath = variable_get("htmltidy_apppath", '')) {
     // first run?
-    include_once "install-htmltidy.inc";
-    if( ! htmltidy_test() ){
+    module_load_include('inc', 'import_html', 'coders_php_library/install-htmltidy');
+    if ( ! htmltidy_test($message) ) {
       // test returned an error
-      drupal_set_message('Unable to tidy file - htmltidy was unavailable. Returning the original source.','error');
+      drupal_set_message('Unable to tidy file - htmltidy was unavailable "$message". Returning the original source.', 'error');
       return file_get_contents($target_path );
     };
   }
-  if(! $htmltidy_apppath = variable_get("htmltidy_apppath", '')){
-    drupal_set_message('Shouldnt get here!','error');
+  if (! $htmltidy_apppath = variable_get("htmltidy_apppath", '')) {
+    drupal_set_message('Shouldn\'t get here!', 'error');
     return;
   }
 
-  define("TIDY_OPTIONS"," -q -config ".foreslash( dirname(__FILE__)."/xhtml_tidy.conf ") );
 
   // format it
-  #$command = $htmltidy_apppath ." ". TIDY_OPTIONS . '"'.escapeshellcmd( foreslash($target_path) ).'"' ;
-  # escapeshellcmd killed ~, which may be required in windows.
-  $command = $htmltidy_apppath ." ". TIDY_OPTIONS . '"'. foreslash($target_path).'" ' ;
-  # Errors are compressed into the output so I can see them
+  $command = $htmltidy_apppath ." ". TIDY_OPTIONS .'"'. foreslash($target_path) .'" ' ;
+  // Errors are compressed into the output so I can see them
 
   // TODO - check for exploits here? What could happen?
-  debug("Running \n$command" ,1);
+  import_html_debug("Running \n$command");
   $result = exec($command, $response, $return_code);
-  $out=join("\n",$response);
+  $out = join("\n", $response);
 
-  if(!$out){
+  if (!$out) {
     // run the exact same command again, but collect the errors this time
-    $result = exec($command.' 2>&1', $response, $return_code);
-    $out=join("\n",$response);
+    $result = exec($command .' 2>&1', $response, $return_code);
+    $out = join("\n", $response);
     
-		debug_pre($out);
-		trigger_error("HTMLTidy failed to parse the input at all! It's probably very problematic HTML.\n A working version of tidy IS at ".$htmltidy_apppath." isn't it?\nI ran <code>\n$command\n</code> and it returned: $return_code \n" , E_USER_WARNING);
+    trigger_error(
+      "HTMLTidy failed to parse the input at all! 
+      It's probably very problematic HTML.
+      I ran <code>\n$command\n</code> 
+      and htmltidy returned: $return_code <pre>". htmlspecialchars($out) ."</pre>\n" , E_USER_WARNING);
     $out = FALSE; // file_get_contents($target_path );
   }
 
+  import_html_debug_code("After command-line tidy", $out);
 
-  debug("<h3>After command-line tidy</h3><textarea rows='40' cols='80'>$out</textarea>",2);
-
-  if($target_path != $filepath)
-  { // remove temp file we just made up.
+  if ($target_path != $filepath) { 
+    // remove temp file we just made up.
     unlink($target_path);
   }
 
@@ -171,24 +203,84 @@ function xml_tidy_file($filepath) {
 /**
  * Tidies an incomplete fragment of HTML 
  * 
- * by wrapping it in a document header/footer,
+ * by wrapping it in a document header/footer, 
  * passing it through htmltidy full,
  * then stripping the 'body'
  * 
  */
-function xml_tidy_fragment($input){
-  if(!$input){ return ''; }
+function xml_tidy_fragment($input) {
+  if (!$input) return '';
   
   // Pretend it's a full document. This declaration just suppresses one of the warnings.
   $declaration = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">';
-  $output = xml_tidy_string($declaration.'<html><head><title></title></head><body>'.$input.'</body></html>');
+  $output = xml_tidy_string($declaration .'<html><head><title></title></head><body>'. $input .'</body></html>');
 
-  if(preg_match('|<body[^>]*>([\s\S]*)</body>|',$output,$matches)){
+  if (preg_match('|<body[^>]*>([\s\S]*)</body>|', $output, $matches)) {
     $output = $matches[1];
   }
-
   return $output;
 }
 
+/**
+ * A form definition for configuring htmltidy on the server.
+ * 
+ * Include it in a system_settings_form()
+ */
+function html_tidy_settings() {
+  module_load_include('inc', 'import_html', 'coders_php_library/install-htmltidy');
+  $warning = ''; // a return container handle
 
-?>
+  $form['HTMLTidy'] = array(  
+    '#type' => 'fieldset',
+    '#title' => 'Install HTMLTidy',
+  );
+
+  if (!htmltidy_test($warning)) {
+    drupal_set_message(t('HTMLTidy executable is not available. %warning ', array('%warning' => $warning)), 'error');
+  }
+  else {
+    $form['HTMLTidy_status']=array(
+      '#value' => t("<p>HTMLTidy is present and correct: %message </p>", array('%message' => $warning ) )
+    );
+    $form['HTMLTidy']['#collapsible'] = TRUE;
+    $form['HTMLTidy']['#collapsed'] = TRUE;
+  }
+
+  $form['HTMLTidy']['htmltidy_apppath'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Path to HTMLTidy executable'),
+    '#default_value' => variable_get('htmltidy_apppath', '/usr/local/bin/tidy'),
+    '#size' => 40,
+    '#maxlength' => 100,
+    '#description' => t("
+      If the distributed php tidy extension is not enabled, 
+      we require the HTML Binary to be available on the server. 
+      Please <a href='http://tidy.sourceforge.net/'>download and install it</a>
+      wherever you can, then tell me where to find it.
+    "),
+  );
+  $form['HTMLTidy'][] = array( 
+    '#value' => t("
+      <p>If you are unable to install the htmltidy binary yourself, 
+      try this button to download and unpack it on the server 
+      (Linux only so far) .</p>
+    ")
+  );
+  $form['HTMLTidy']['install_button'] = array(
+    '#type' => 'submit',
+    '#value' => t('install htmltidy binary'),
+    '#submit' => 'htmltidy_install_binary',
+  );
+  $form['HTMLTidy'][] = array( 
+    '#value' => t("
+      <p>There is a <i>small</i> chance it will work for you, 
+      but configurations are different everywhere. 
+      This will work only on Linux, Windows users can just 
+      <a href='http://tidy.sourceforge.net/'>get the exe</a> 
+      and drop it in this directory.</p>
+    ")
+  );
+
+  return $form;
+}
+

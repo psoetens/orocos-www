@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_numbering.inc,v 1.3 2007/04/25 14:46:28 darthsteven Exp $
+// $Id: drutex_numbering.inc,v 1.3.6.1 2008/11/17 09:05:36 darthsteven Exp $
 
 /**
  * @file
@@ -15,16 +15,20 @@ function drutex_numbering_info($format = -1) {
   return (object) array(
     'title' => t('Numbering / Referencing'),
     'description' => t('Assists automatic numbering of tex, equation und equations environments.'),
-    'toggle' => false,
+    'toggle' => FALSE,
     'weight' => 20
   );
+}
+
+function drutex_numbering_filter_tips($delta, $format, $long = FALSE) {
+  return t('Assists automatic numbering of tex, equation, and equations environments.');
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_numbering_defaults() {
-  $D['drutex_numbering_active'] = true;
+  $D['drutex_numbering_active'] = TRUE;
   return $D;
 }
 

@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * @file
+ * imagepicker_postlet module install, update and uninstall functions.
+ */
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function imagepicker_postlet_uninstall() {
+  // delete entries in the variable table
+  db_query("DELETE FROM {variable} WHERE name LIKE 'imagepicker_postlet%'");
+}

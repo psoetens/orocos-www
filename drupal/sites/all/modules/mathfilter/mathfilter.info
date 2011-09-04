@@ -9,8 +9,9 @@ project = "mathfilter"
 datestamp = "1182212348"
 
 
-; Information added by drupal.org packaging script on 2007-09-20
-version = "5.x-1.1"
+; Information added by drupal.org packaging script on 2007-09-27
+version = "6.x-1.0"
+core = "6.x"
 project = "mathfilter"
-datestamp = "1190330424"
+datestamp = "1190887506"
 

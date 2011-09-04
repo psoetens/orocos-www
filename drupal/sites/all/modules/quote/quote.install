@@ -1,5 +1,5 @@
 <?php
-// $Id: quote.install,v 1.1.2.1 2007/08/11 09:34:53 karthik Exp $
+// $Id: quote.install,v 1.1.2.1.2.1 2008/03/30 06:15:10 karthik Exp $
 
 /**
  * Implementation of hook_install().
@@ -36,4 +36,6 @@ function quote_update_1() {
  */
 function quote_uninstall() {
   variable_del('quote');
+
+  drupal_set_message(t('The quote module has been uninstalled successfully.'));
 }

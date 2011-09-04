@@ -1,4 +1,10 @@
 <?php
+// $Id: spam_node.inc,v 1.1.2.1.2.5.2.8 2009/08/06 21:06:50 jeremy Exp $
+
+/**
+ * @file
+ * Include file for integration with the node system.
+ */
 
 /**
  * Drupal _nodeapi() hook.
@@ -102,6 +108,11 @@ function node_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
         '#value' => $arg1['body'],
         '#disabled' => TRUE,
       );
+      $form['node']['author'] = array(
+        '#type' => 'markup',
+        '#prefix' => '<div><strong>' . t('Author') . ':</strong></div>',
+        '#value' => theme('username', user_load(array('uid' => $arg1['uid']))),
+      );
       // TODO: CCK fields
       return $form;
 
@@ -122,22 +133,6 @@ function node_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
 
     case 'edit_link':
       return "node/$arg1/edit";
-
-    case 'process_form':
-      if (is_array($arg2) && ($arg2['#id'] == 'node-form')) {
-        $node = $arg2['#post'];
-        $node['type'] = $arg2['type']['#value'];
-        if (is_array($node) && $node['op'] == t('Submit')) {
-          $_SESSION['spam_form'] = $arg2;
-          spam_scan($node, 'node');
-        }
-        else {
-          if(isset($_SESSION['spam_form'])) {
-            unset($_SESSION['spam_form']);
-          }
-        }
-      }
-      break;
 
     case 'link':
       if (is_object($arg1) && isset($arg1->nid)) {
@@ -161,16 +156,45 @@ function node_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
 
     case 'publish':
       if (is_numeric($arg1)) {
-        node_operations_publish(array($arg1));
+      	$arg1 = node_load($arg1);
+        node_publish_action($arg1);
+	node_save($arg1);
       }
       break;
 
     case 'unpublish':
       if (is_numeric($arg1)) {
-        node_operations_unpublish(array($arg1));
+      	$arg1 = node_load($arg1);
+        node_unpublish_action($arg1);
+	node_save($arg1);
       }
       break;
 
   }
 }
 
+/**
+ * Form alter gets its own function so we can reference &$form without causing
+ * errors in PHP4 installations.  (If we use spamapi, we have to set a default,
+ * which PHP4 doesn't support.)
+ */
+function node_spamapi_form_alter(&$form, &$form_state, $form_id) {
+  if (strpos($form_id, '_node_form')) {
+    $form['#validate'][] = 'node_spam_scan';
+  }
+}
+
+/**
+ * Scan node content before it is posted into the database.
+ */
+function node_spam_scan($form, &$form_state) {
+  if ($form_state['clicked_button']['#value'] == t('Save')) {
+    $node = $form['#post'];
+    $node['type'] = $form['type']['#value'];
+    $_SESSION['spam_form'] = $form;
+    spam_scan($node, 'node');
+  }
+  else if (isset($_SESSION['spam_form'])) {
+    unset($_SESSION['spam_form']);
+  }
+}

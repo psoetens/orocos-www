@@ -1,9 +1,10 @@
-; $Id: wikitools.info,v 1.1.2.1 2008/01/05 03:40:43 cwgordon7 Exp $
+; $Id: wikitools.info,v 1.4 2007/12/31 23:35:06 cwgordon7 Exp $
 name = Wikitools
-description = Provides helper functionality to achieve more wiki-like behavior with Drupal.
-
-; Information added by drupal.org packaging script on 2008-02-25
-version = "5.x-1.2"
+description = Provides helper functionality to have wiki-like behaviour.
+core = "6.x"
+; Information added by drupal.org packaging script on 2009-06-18
+version = "6.x-1.2"
+core = "6.x"
 project = "wikitools"
-datestamp = "1203931814"
+datestamp = "1245300061"
 

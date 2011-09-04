@@ -1,10 +1,68 @@
 <?php
-// $Id: drutex.module,v 1.20.2.3 2008/01/16 01:06:00 darthsteven Exp $
+// $Id: drutex.module,v 1.23.4.2 2009/01/04 16:33:09 darthsteven Exp $
 
 /**
  * @file
  * DruTeX core functions and interaction interface with Drupal.
  */
+
+/**
+ * Implementation of hook_link().
+ */
+
+function drutex_link($type, $node = NULL, $teaser = FALSE) {
+  $links = array();
+  if ($type == 'node') {
+    $format = $node->format;
+    foreach (drutex_submodule_list($format) as $submodule) {
+      if (drutex_submodule_is_active($submodule, $format)) {
+        $linkfunction = 'drutex_'. $submodule .'_link';
+        if (function_exists($linkfunction)) {
+          $result = $linkfunction($type, $node, $teaser);
+          if (isset($result) && is_array($result)) {
+            $links = array_merge($links, $result);
+          }
+          elseif (isset($result)) {
+            $links[] = $result;
+          }
+        }
+      }
+    }
+  }
+  return $links;
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function drutex_help($path, $arg) {
+  switch ($path) {
+    case 'admin/modules#description':
+      return t('Allows users to render LaTeX/TeX in many different ways.');
+  }
+}
+
+/**
+ * Implementation of hook_filter_tips().
+ */
+function drutex_filter_tips($delta, $format, $long) {
+  $output = '';
+    $output .= t('LaTex commands embedded in text will be interpreted and rendered. Additional information can be found at <a href ="http://groups.drupal.org/node/1263"> DruTex Documentation Pages </a>');
+    $output .= '<ul>';
+    foreach (drutex_submodule_list($format) as $submodule) {
+      if (drutex_submodule_is_active($submodule, $format)) {
+        $helpfunction = 'drutex_'. $submodule .'_filter_tips';
+        if (function_exists($helpfunction)) {
+          $res = $helpfunction($delta, $format, $long);
+          if ($res != '') {
+            $output .= '<li>'. $res .'</li>';
+          }
+        }
+      }
+    }
+    $ouptut .= '</ul>';
+  return $output;
+}
 
 /**
  * Implementation of hook_filter().
@@ -17,7 +75,7 @@ function drutex_filter($op, $delta = 0, $format = -1, $text = '') {
     case 'description':
       return t('Allows users to render LaTeX/TeX in many different ways.');
 
-    case "process":
+    case 'process':
       return drutex_node2html($text, $format);
 
     case 'settings':
@@ -29,30 +87,60 @@ function drutex_filter($op, $delta = 0, $format = -1, $text = '') {
 }
 
 /**
+ * Implementation of hook_init()
+ */
+function drutex_init() {
+  // Load our stylesheets
+  drutex_set_stylesheet();
+}
+
+/**
  * Implementation of hook_menu().
  */
-function drutex_menu($may_cache) {
+function drutex_menu() {
   $items = array();
+  if (drutex_submodule_is_active('remote')) {
+    $items['drutex/remote'] = array(
+      'title' => 'Drutex Remote Rendering',
+      'file' => 'drutex_remote.inc',
+      'page callback' => 'drutex_remote_do_render',
+      'access callback' => 'user_access',
+      'access arguments' => array('access content'),
+      'type' => MENU_CALLBACK,
+    );
 
-  if (!$may_cache) {
-    if (drutex_submodule_is_active('pdf')) {
-      $items[] = array(
-        'path' => 'drutex/pdf',
-        'title' => t('node2pdf'),
-        'callback' => 'drutex_node2pdf_wrapper',
-        'access' => user_access('access pdf files'),
-        'type' => MENU_CALLBACK);
-
-      $items[] = array(
-        'path' => 'drutex/latex',
-        'title' => t('node2latex'),
-        'callback' => 'drutex_node2latex_wrapper',
-        'access' => user_access('access latex source'),
-        'type' => MENU_CALLBACK);
-    }
+    $items['admin/settings/drutex'] = array(
+      'title' => 'DruTeX Settings',
+      'description' => 'Adjusts the settings for the remote LaTeX rendering interface',
+      'file' => 'drutex_remote.inc',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('drutex_remote_admin_settings'),
+      'access callback' => 'user_access',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_NORMAL_ITEM,
+    );
   }
+  if (drutex_submodule_is_active('pdf')) {
+    $items['drutex/pdf'] = array(
+      'title' => 'node2pdf',
+      'file' => 'drutex_pdf.inc',
+      'page callback' => 'drutex_node2pdf_wrapper',
+      'page arguments' => array(2),
+      'access callback' => 'user_access',
+      'access arguments' => array('access pdf files'),
+      'type' => MENU_CALLBACK,
+    );
 
-  drutex_set_stylesheet();
+    $items['drutex/latex'] = array(
+      'title' => 'node2latex',
+      'file' => 'drutex_pdf.inc',
+      'page callback' => 'drutex_node2latex_wrapper',
+      'page arguments' => array(2),
+      'access callback' => 'user_access',
+      'access arguments' => array('access latex source'),
+      'type' => MENU_CALLBACK,
+    );
+  }
 
   return $items;
 }
@@ -154,15 +242,7 @@ function _drutex_filter_settings($format = -1) {
   */
 
   $image_dir = drutex_var_get("drutex_dir_images_$format");
-
-  if (!is_writable($image_dir)) {
-    if (file_exists($image_dir)) {
-      chmod($image_dir, 0777);
-    }
-    else {
-      mkdir($image_dir);
-    }
-  }
+  file_check_directory($image_dir, FILE_CREATE_DIRECTORY);
 
   /* global settings
      that means: settings all submodules can share
@@ -269,6 +349,7 @@ function drutex_set_stylesheet() {
  */
 function drutex_node2html($text, $format = -1) {
   /* preprocess */
+
   foreach (drutex_submodule_implements('node2html_preprocess', $format) as $submodule) {
     $text = drutex_submodule_invoke($submodule, 'node2html_preprocess', $text, $format);
   }
@@ -305,7 +386,7 @@ function _drutex_weight_sort_cmp($a, $b) {
     $b->weight = 1000;
   }
   if ($a->weight == $b->weight) {
-     return 0;
+    return 0;
   }
   return ($a->weight < $b->weight) ? -1 : 1;
 }
@@ -379,7 +460,7 @@ function drutex_parse_attributes($subject) {
 function drutex_merge_attributes($A) {
   $str = '';
   foreach ($A as $key => $val) {
-    $str .= strtolower($key) . "=\"$val\" ";
+    $str .= strtolower($key) ."=\"$val\" ";
   }
   return trim($str);
 }
@@ -416,9 +497,9 @@ function _drutex_hide($cmd = 'get', $subject = '') {
 
   if ($cmd == 'set') {
     $hidden[$count] = _drutex_unescape($subject);
-    return _drutex_secret() . ':' . $count++ . ':';
+    return _drutex_secret() .':'. $count++ .':';
   }
-  else if ($cmd == 'get') {
+  elseif ($cmd == 'get') {
     $subject = (int)$subject;
     return $hidden[$subject];
   }
@@ -485,8 +566,8 @@ function _drutex_unescape($text, $quote = '"') {
  */
 function _drutex_create_temporary_dir($format = -1) {
   static $n = 1;
-  $dir = drutex_var_get("drutex_dir_temporary_$format") . '/drutex-' . _drutex_secret() . '-' . $n++;
-  mkdir($dir);
+  $dir = drutex_var_get("drutex_dir_temporary_$format") .'/drutex-'. _drutex_secret() .'-'. $n++;
+  file_check_directory($dir, FILE_CREATE_DIRECTORY);
   return $dir;
 }
 
@@ -499,7 +580,8 @@ function _drutex_delete_dir($dir) {
   if ($handle = opendir($dir)) {
     while ($item = readdir($handle)) {
       if ($item != '.' && $item != '..') {
-         unlink("$dir/$item");
+        $file = $dir .'/'. $item;
+        file_delete($file);
       }
     }
     closedir($handle);
@@ -514,9 +596,9 @@ function _drutex_copy_dir($source, $dest) {
   if ($handle = opendir($source)) {
     while ($item = readdir($handle)) {
       if ($item != '.' && $item != '..') {
-        if(is_file("$source/$item")) {
-          copy("$source/$item", "$dest/$item");
-        }
+        $sourcefile = $source .'/'. $item;
+        $destfile = $dest .'/'. $item;
+        file_copy($sourcefile, $destfile);
       }
     }
     closedir($handle);
@@ -526,6 +608,7 @@ function _drutex_copy_dir($source, $dest) {
 /**
  * Get URL where the images are saved.
  */
+
 function drutex_get_image_url($format = -1) {
   $path = drutex_var_get("drutex_url_images_$format");
 
@@ -538,13 +621,14 @@ function drutex_get_image_url($format = -1) {
   }
 }
 
+
 /**
  * Implementation of hook_nodeapi().
  *
  * Notify all submodules when a node changed.
  */
-function drutex_nodeapi(&$node, $op, $arg) {
-  drutex_submodule_invoke_all('nodeapi', $node, $op, $arg, "format={$node->format}");
+function drutex_nodeapi(&$node, $op, $teaser = FALSE, $page = FALSE) {
+  drutex_submodule_invoke_all('nodeapi', $node, $op, $teaser, $page, "format={$node->format}");
 }
 
 /**
@@ -568,16 +652,16 @@ function drutex_perm() {
  *   marked active in the specified input format.
  */
 function drutex_submodule_is_active($submodule, $format = -1) {
-  if (is_file(drupal_get_path('module', 'drutex') . "/drutex_{$submodule}.inc")) {
+  if (is_file(drupal_get_path('module', 'drutex') ."/drutex_{$submodule}.inc")) {
     if ($format == -1) {
-      return true;
+      return TRUE;
     }
     else if (_format_uses_drutex($format) && drutex_var_get("drutex_{$submodule}_active_{$format}")) {
-      return true;
+      return TRUE;
     }
   }
 
-  return false;
+  return FALSE;
 }
 
 /**
@@ -593,11 +677,11 @@ function _format_uses_drutex($format = -1) {
     $result = db_query("SELECT format from {filters} WHERE module = 'drutex'");
 
     while ($obj = db_fetch_object($result)) {
-      $cache[$obj->format] = true;
+      $cache[$obj->format] = TRUE;
     }
 
     /* the format -1 always 'uses' DruTeX */
-    $cache[-1] = true;
+    $cache[-1] = TRUE;
   }
 
   return isset($cache[$format]);
@@ -742,7 +826,6 @@ function drutex_submodule_invoke_all() {
   $hook = array_shift($args);
   $return = array();
   $format = _drutex_rewrite_format_call($args);
-
   foreach (drutex_submodule_implements($hook, $format) as $submodule) {
     $result = call_user_func_array("drutex_{$submodule}_{$hook}", $args);
     if (isset($result) && is_array($result)) {
@@ -770,9 +853,7 @@ function _drutex_rewrite_format_call(&$args) {
   }
 }
 
-
 $path = drupal_get_path('module', 'drutex');
-
 
 /* load the submodules */
 foreach (drutex_submodule_list() as $submodule) {

@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_pdf.inc,v 1.18 2007/04/25 14:46:28 darthsteven Exp $
+// $Id: drutex_pdf.inc,v 1.18.6.2 2009/01/04 16:28:44 darthsteven Exp $
 
 /**
  * @file
@@ -15,16 +15,40 @@ function drutex_pdf_info($format = -1) {
   return (object) array(
     'title' => t('PDF Generator'),
     'description' => t('Allows to generate pdf-versions of a node (with decent html2latex features).'),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 6
   );
+}
+
+/**
+ * Implementation of subhook_filter_tips().
+ */
+function drutex_pdf_filter_tips($delta, $format, $long = FALSE) {
+  if (user_access('access pdf files')) {
+    return t('Visit drutex/pdf/nid to generate pdf-versions of this node.');
+  }
+}
+
+/**
+ * Implementation of subhook_link().
+ */
+function drutex_pdf_link($type, $node = NULL, $teaser = FALSE) {
+  if (user_access('access pdf files')) {
+    $pdf_link = 'drutex/pdf/'. $node->nid;
+    $text = t('Generate PDF file');
+    $links['drutex_pdf_link'] = array(
+      'title' => $text,
+      'href' => $pdf_link,
+      );
+    return $links;
+  }
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_pdf_defaults() {
-  $D['drutex_pdf_active'] = true;
+  $D['drutex_pdf_active'] = TRUE;
 
   /* relative to drutex/templates/pdf */
   $D['drutex_template_pdf'] = 'plain.tex';
@@ -82,14 +106,14 @@ function drutex_pdf_filter_settings($format = -1) {
  *   The node id.
  */
 function drutex_node2pdf_wrapper($nid) {
+  global $base_url;
   $node = node_load($nid);
   $pdf_dir = drutex_var_get("drutex_dir_images_{$node->format}");
-
-  if (!is_file("$pdf_dir/{$node->nid}.pdf")) {
+  $pdf_file = $pdf_dir .'/'. $node->nid .'.pdf';
+  if (!is_file($pdf_file)) {
     drutex_node2pdf($nid);
   }
-
-  drupal_goto("$pdf_dir/{$node->nid}.pdf");
+  drupal_goto($base_url .'/'. $pdf_file);
 }
 
 /**
@@ -105,20 +129,20 @@ function drutex_node2pdf($nid) {
   $node = node_load($nid);
 
   drutex_node2latex($nid);
-
   $image_dir = drutex_var_get("drutex_dir_images_{$node->format}");
 
   /* create temporary dir */
   $temporary_dir = _drutex_create_temporary_dir();
-
-  copy("$image_dir/{$node->nid}.tex", "$temporary_dir/{$node->nid}.tex");
-  _drutex_copy_dir("modules/drutex/templates/pdf", $temporary_dir);
-
+  $file = $node->nid .'.tex';
+  $temporary_file = $temporary_dir .'/'. $file;
+  $source_file = $image_dir .'/'. $file;
+  file_copy($source_file, $temporary_file);
+  $pdf_template_path = drupal_get_path('module', 'drutex') .'/templates/pdf';
+  _drutex_copy_dir($pdf_template_path, $temporary_dir);
 
   /*
    * Prepare and execute the conversion commands
    */
-
   $pattern_convert = drutex_var_get("drutex_pattern_pdflatex_{$node->format}");
 
   /* replacement array */
@@ -141,7 +165,7 @@ function drutex_node2pdf($nid) {
 
       if (drutex_var_get("drutex_debug_$format")) {
         $level = ($cmd_retval == 0) ? WATCHDOG_NOTICE : WATCHDOG_WARNING;
-        watchdog('DruTeX', "Command: $cmd<br />Return value: $cmd_retval", $level);
+        watchdog('DruTeX', "Command: %cmd<br />Return value: %cmdret", array('%cmd' => $cmd, '%cmdret' => $cmd_retval), $level);
       }
     }
   }
@@ -151,7 +175,7 @@ function drutex_node2pdf($nid) {
     _drutex_delete_dir($temporary_dir);
   }
   else {
-    watchdog('DruTeX', "Temporary directory for pdf-generation was $temporary_dir.", WATCHDOG_NOTICE);
+    watchdog('DruTeX', "Temporary directory for pdf-generation was %tdir.", array('%tdir' => $temporary_dir), WATCHDOG_NOTICE);
   }
 }
 
@@ -164,14 +188,15 @@ function drutex_node2pdf($nid) {
  *   The node id.
  */
 function drutex_node2latex_wrapper($nid) {
+  global $base_url;
   $node = node_load($nid);
   $pdf_dir = drutex_var_get("drutex_dir_images_{$node->format}");
-
-  if (!is_file("$pdf_dir/{$node->nid}.tex")) {
+  $tex_file = $pdf_dir .'/'. $node->nid .'.tex';
+  if (!is_file($tex_file)) {
     drutex_node2latex($nid);
   }
 
-  drupal_goto("$pdf_dir/{$node->nid}.tex");
+  drupal_goto($base_url .'/'. $tex_file);
 }
 
 /**
@@ -198,11 +223,11 @@ function drutex_node2latex($nid) {
 
   /* convert html elements in the node's content to latex */
   $content = drutex_html2latex($node);
-
+//  print $content;
   /* replace the template keys by the actual values */
   $map = array(
     'DRUTEX_NODE_TITLE' => $node->title,
-    'DRUTEX_NODE_URL' => url('node/'. $node->nid, null, null, true),
+    'DRUTEX_NODE_URL' => url("node/$node->nid", array('absolute' => TRUE)),
     'DRUTEX_DIR' => drutex_var_get('drutex_dir'),
     'DRUTEX_NODE_BODY' => $content
   );
@@ -224,7 +249,7 @@ function drutex_node2latex($nid) {
  */
 function drutex_html2latex(&$node) {
   if (drutex_submodule_is_active('security', $node->format)) {
-    if (drutex_security($node->body, $format) == false) {
+    if (drutex_security($node->body, $format) == FALSE) {
       return 'Unallowed command detected!';
     }
   }
@@ -233,7 +258,7 @@ function drutex_html2latex(&$node) {
 
   /* include the rules file */
   $drutex_path = drupal_get_path('module', 'drutex');
-  include_once("$drutex_path/drutex_pdf.rules");
+  require_once("$drutex_path/drutex_pdf.rules");
 
   /* get entities */
   $A = drutex_submodule_invoke_all('drutex2latex', $node, "format=$format");
@@ -250,33 +275,28 @@ function drutex_html2latex(&$node) {
   return $text;
 }
 
+
 /**
  * Implementation of hook_nodeapi().
  */
-function drutex_pdf_nodeapi(&$node, $op, $arg) {
-  if (true) {
+function drutex_pdf_nodeapi(&$node, $op, $teaser = FALSE, $page = FALSE) {
+  if (TRUE) {
     switch ($op) {
-      case 'validate':
-        break;
-
       case 'load':
         break;
-
+      case 'view':
+        break;
+      case 'validate':
+        break;
       case 'insert':
         break;
-
       case 'update':
       case 'delete':
         $pdf_dir = drutex_var_get("drutex_dir_images_{$node->format}");
-
-        if (is_file("$pdf_dir/{$node->nid}.pdf")) {
-          unlink("$pdf_dir/{$node->nid}.pdf");
-        }
-
-        if (is_file("$pdf_dir/{$node->nid}.tex")) {
-          unlink("$pdf_dir/{$node->nid}.tex");
-        }
-
+        $pdf_file = $pdf_dir .'/'. $node->nid .'.pdf';
+        $tex_file = $pdf_dir .'/'. $node->nid .'.tex';
+        file_delete($pdf_file);
+        file_delete($tex_file);
         break;
     }
   }

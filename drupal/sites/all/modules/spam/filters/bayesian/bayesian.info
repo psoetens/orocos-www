@@ -1,12 +1,12 @@
-; $Id: bayesian.info,v 1.1.2.1 2007/11/25 00:01:57 jeremy Exp $
+; $Id: bayesian.info,v 1.1.2.1.2.1 2008/12/25 05:42:10 jeremy Exp $
 name = Bayesian filter
 description = A bayesian filter.
 package = Spam
-dependencies = spam
-
-
-; Information added by drupal.org packaging script on 2008-09-29
-version = "5.x-3.0-beta1"
+dependencies[] = spam
+core = 6.x
+; Information added by drupal.org packaging script on 2009-08-10
+version = "6.x-1.0"
+core = "6.x"
 project = "spam"
-datestamp = "1222710636"
+datestamp = "1249930375"
 

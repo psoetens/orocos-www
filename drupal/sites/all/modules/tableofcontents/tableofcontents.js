@@ -1,16 +1,35 @@
-// $Id: tableofcontents.js,v 1.1.2.4 2008/06/21 18:21:16 deviantintegral Exp $
+// $Id: tableofcontents.js,v 1.1.2.1.2.3.2.4 2009/07/21 04:54:40 alexiswilke Exp $
 
 if (Drupal.jsEnabled) {
+  toc_collapse = 0;
+  toc_scroll_back_to_top = 0;
   $(document).ready( function () {
+    // setup table
+    if (toc_collapse) {
+      $('.toc-list').hide();
+      label = Drupal.t('show');
+    }
+    else {
+      label = Drupal.t('hide');
+    }
+    $('.toc-toggle-message').html(' [<a href="#" class="toc-toggle">' + label + '</a>]');
+
+    // allow toggling
     $('a.toc-toggle').click(function() {
       $('.toc-list').slideToggle();
-	  var text = $('a.toc-toggle').text();
-	  if (text == 'hide') {
-		  $('a.toc-toggle').html('show');
-      } else {
-		  $('a.toc-toggle').html('hide');
+      var text = $('a.toc-toggle').text();
+      if (text == Drupal.t('hide')) {
+        $('a.toc-toggle').text(Drupal.t('show'));
       }
-	  return false;
-	});
+      else {
+        $('a.toc-toggle').text(Drupal.t('hide'));
+      }
+      return false;
+    });
+
+    // if available, do localScroll
+    if (toc_scroll_back_to_top && $.localScroll) {
+      $('.toc-list, .toc-back-to-top').localScroll({ hash: true });
+    }
   });
 }

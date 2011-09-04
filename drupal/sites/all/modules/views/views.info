@@ -1,11 +1,12 @@
-; $Id: views.info,v 1.2.2.4 2007/06/18 23:07:13 dww Exp $
+; $Id: views.info,v 1.7 2007/08/12 06:52:14 merlinofchaos Exp $
 name = Views
-description = The views module creates customized views of node lists.
+description = Create customized lists and queries from your database.
 package = Views
+core = 6.x
 
-
-; Information added by drupal.org packaging script on 2007-07-14
-version = "5.x-1.6"
+; Information added by drupal.org packaging script on 2010-12-15
+version = "6.x-2.12"
+core = "6.x"
 project = "views"
-datestamp = "1184451606"
+datestamp = "1292446272"
 

@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_linebreak.inc,v 1.9 2007/04/25 14:46:28 darthsteven Exp $
+// $Id: drutex_linebreak.inc,v 1.9.6.1 2008/11/17 09:05:36 darthsteven Exp $
 
 /**
  * @file
@@ -16,16 +16,24 @@ function drutex_linebreak_info($format = -1) {
   return (object) array(
     'title' => t('Line break converter'),
     'description' => check_plain(t('Converts line breaks into HTML (i.e. <br /> and <p> tags).')),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 12
   );
+}
+
+/**
+ * Implementation of subhook_filter_tips().
+ */
+
+function drutex_linebreak_filter_tips($delta, $format, $long = FALSE) {
+  return t('Line and paragraphs break automatically.');
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_linebreak_defaults() {
-  $D['drutex_linebreak_active'] = true;
+  $D['drutex_linebreak_active'] = TRUE;
   $D['drutex_linebreak_behaviour'] = 'drupal';
 
   return $D;

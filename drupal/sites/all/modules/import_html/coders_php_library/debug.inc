@@ -1,4 +1,5 @@
 <?php
+// $Id: debug.inc,v 1.17.2.9 2009/10/06 13:57:15 dman Exp $
 /**
  * @file
  * Small library of diagnostic feedback stuff.
@@ -10,10 +11,27 @@
  *
  * @package coders
  * @author Dan Morrison http://coders.co.nz/
- * @version $Id: debug.inc,v 1.8 2006/11/12 06:41:08 dman Exp $ 
  */
 
+/**
+ * Wrapper to watchdog
+ * 
+ * WATCHDOG_DEBUG level alerts are discared unless debug_level is set
+ */
+function import_html_debug($message, $variables = array(), $severity = WATCHDOG_DEBUG) {
+  $debuglevel = import_html_variable('debug_level');
+  if (empty($debuglevel) && ($severity >= WATCHDOG_DEBUG)) return;
+  if (! is_array($variables)) {
+    trigger_error("Incorrect code call to import_html_debug ($message)");
+  }
+  
+  watchdog('Import HTML', $message, $variables, $severity);
+}
 
+function import_html_debug_code($message, $data = array(), $severity = WATCHDOG_DEBUG) {
+  $printed_value = "<textarea rows=20 style=\"width: 100%;\">\n ". print_r($data, 1) ." </textarea>";
+  import_html_debug($message . $printed_value, $variables = array(), $severity);
+}
 
 /*
  * This is (obviously) a debug-only library
@@ -22,11 +40,10 @@
  * be called upon more than once, from different locations even.
  * Do our own require_once - type check.
  */
-if(! function_exists('debug')){ 
+if (! function_exists('debug')) { 
 
-  if( isset($REQUEST["DEBUGLEVEL"]) && ( ! defined("DEBUGLEVEL")) ){
-    define("DEBUGLEVEL",$REQUEST["DEBUGLEVEL"]);
-  } 
+  define('DEBUGBACKTRACE', 0);
+
 
   /**
    * Display a feedback message
@@ -44,96 +61,26 @@ if(! function_exists('debug')){
    * @param int    $level The amount of detail to show - 1 is basic, 2 identifies most function calls, 3 is verbose.
    * @global DEBUGLEVEL
    */
-  function debug($message,$level=0) {
-    static $timestamp; static $starttime;
-    if(!$timestamp){$timestamp = $starttime = debug_get_microtime(); debug("Initialized Timestamp",3);}
-    $timescale=100;
-
-    // Check if debug is turned on here
-    $debug_array = debug_backtrace();
-    $caller = $debug_array[1];
-    if(isset($caller['file'])){
-      $caller_dir = basename(dirname($caller['file']));
-    } else {$caller_dir='';}
-    global $debug_watch;
- 
-    if( (! $level) || ($level <= $debug_watch[$caller_dir]) || ($level <= DEBUGLEVEL) ){
-      print "<div class='debug' style='margin-left:{$level}em'>";
-      print "<div class='message'>$message</div>\n";
-
-      if( defined("DEBUGBACKTRACE") ){
-
-        $previous_caller = array_shift($debug_array);
-        $traceDepth = DEBUGLEVEL+DEBUGBACKTRACE;
-
-        print("<small class='trace'><i>");
-        while(($bt=array_shift($debug_array))&&(1+$traceDepth--)){
-          if($previous_caller['file'])
-          { // sometimes debug_backtrace() returns dummy lines?
-            print("\n : in <strong >".$bt['function']."()</strong>, line " . $previous_caller['line'] . " " . basename($previous_caller['file']) );
-          }
-          $previous_caller=$bt;
-        }
-        $now = debug_get_microtime();
-        print(" <strong>". sprintf("%01.2f", ($now-$timestamp) ) ."s</strong> elapsed. (".((int)($timescale*($now-$starttime)))." total)");$timestamp=$now;
-        print("</i></small>");
-      }
-      flush();
-      print("</div>\n");
-    }
-
-    if( defined("DEBUGSYSLOG") && DEBUGSYSLOG){
-      syslog(E_USER_NOTICE,$message);
-    }
+  function debug($message, $level = 0) {
+    $debuglevel = import_html_variable('debug_level');
+    if (! is_string($message)) return debug_pre($message, $level);
+    if ( ($level) && ($level > $debuglevel) ) return; 
+    drupal_set_message($message . (DEBUGBACKTRACE ? debug_get_trace() : '') );
   }
 
 
   /**
    * Dump an object or code listing in viewable raw format
    */
-  function debug_pre($message,$level=0) {
-    debug("<pre>".htmlspecialchars(print_r($message,1)) ."</pre>",$level);
+  function debug_pre($message, $level=0) {
+    $debuglevel = import_html_variable('debug_level');
+    if ( ($level) && ($level > $debuglevel) ) return; 
+    debug("<pre>". htmlspecialchars(print_r($message, 1)) ."</pre>".  debug_get_trace(), $level);
   }
-
+  
   function debug_get_microtime() { 
-    list($usec, $sec) = explode(" ",microtime()); 
+    list($usec, $sec) = explode(" ", microtime()); 
     return ((float)$usec + (float)$sec); 
   } 
 
-  function debug_css(){
-    return '
-      <style  type="text/css">
-        .debug{ }
-        .debug .trace{ font-size:70%; color:#cccccc;  }
-        .debug:hover .trace{ display:block; }
-        .debug li, .debug ul {margin-top:0.1em;margin-bottom:0.1em;}
-      </style>
-    ';
-  }
-
-  /**
-   * Advanced debug levels - can be set different for different directories.
-   * Either define the 'section' or I'll infer it from the caller
-   */  
-  function debug_set_level($level,$section=''){
-    drupal_set_html_head(debug_css());
-    if(! $section){
-      $debug_array = debug_backtrace();
-      $caller = $debug_array[0];
-      $section = basename(dirname($caller['file']));
-    }
-    global $debug_watch;
-    $debug_watch[$section] = $level;
-  }
 }
-
-
-# devel.module hijacked this! Yay for core, but now I never know if it's available ;)'
-#if(! function_exists('dsm')){
-#  /**
-#   * Shorthand for drupal_set_message(print_r($arr,1));
-#   */
-#  function dsm($arr){drupal_set_message(print_r($arr,1));}
-#}
-
-?>

@@ -1,5 +1,5 @@
 <?php
-// $Id: mailsave_to_imagefield.module,v 1.2 2007/10/23 22:04:01 stuartgreenfield Exp $
+// $Id: mailsave_to_imagefield.module,v 1.3 2007/11/27 22:03:44 stuartgreenfield Exp $
 /**
  * This module interacts with mailsave
  * It creates CCK imagefield items from attached images
@@ -83,7 +83,11 @@ function _mailsave_to_imagefield_attempt_image(&$node) {
   foreach ($node->mailsave_attachments as $key => $file) {
 
     // Check to see if it's a image type that the imagefield will take
-    if ( (trim($cck_image_extensions) == '' || strpos($cck_image_extensions, _file_ext($file['filename'])) !== FALSE ) && strpos($file['filemime'], 'image/') == 0 )  {
+    // Note - current official release of imagefield doesn't include cck_image_extensions, this only appears in
+    // branch 5--2 onwards. So we check that the extension list is empty, or the extension is otherwise allowed
+    /// but we also check the mime type is image/. This might cause problems for some webmail type clients that
+    // report image uploads as octet streams, but will have to do for now!
+    if ( (trim($cck_image_extensions) == '' || strpos($cck_image_extensions, _file_ext($file['filename'])) !== FALSE ) && strpos(strtolower($file['filemime']), 'image/') === 0 )  {
 
       // Let's scale the image per the imagefield max settings
       $file = _imagefield_scale_image($file, $field_info['widget']['max_resolution']);

@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_latex.inc,v 1.11 2006/09/06 02:25:41 dfg Exp $
+// $Id: drutex_latex.inc,v 1.11.8.1 2008/11/17 09:05:36 darthsteven Exp $
 
 /**
  * @file
@@ -13,16 +13,40 @@ function drutex_latex_info($format = -1) {
   return (object) array(
     'title' => t('LaTeX to HTML'),
     'description' => t('Converts many LaTeX commands and environments to plain HTML.'),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 4
   );
+}
+
+/**
+ * Implementation of subhook_filter_tips().
+ */
+function drutex_latex_filter_tips($delta, $format, $long = FALSE) {
+  if (user_access('access latex source')) {
+    return t('Visit drutex/latex/nid to generate a LaTeX file of this node.');
+  }
+}
+
+/**
+ * Implementation of subhook_link().
+ */
+function drutex_latex_link($type, $node = NULL, $teaser = FALSE) {
+  if (user_access('access latex source')) {
+    $latex_link = 'drutex/latex/'. $node->nid;
+    $text = t('Generate LaTex file');
+    $links['drutex_latex_link'] = array(
+      'title' => $text,
+      'href' => $latex_link,
+      );
+    return $links;
+  }
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_latex_defaults() {
-  $D['drutex_latex_active'] = false;
+  $D['drutex_latex_active'] = FALSE;
   return $D;
 }
 

@@ -1,0 +1,31 @@
+/* $Id: CHANGELOG.txt,v 1.1.2.4 2009/10/22 02:02:09 franz Exp $ */
+
+
+ImageField_Assist 6.x-1.0-alpha, 2009-10-21
+------------------------------
+feature request: Changed TinyMCE icon to default image button. 
+Added paging support
+feature request #553908 by kirilius: Added support for filtering imagecache presets (Admin settings page).
+bug report #516982 by guix: Now the inline images have a nice caption and link.
+new feature: Now floating images have a nice margin.
+bug report #595684 by sgriffin, lourenzo: Improved field detection for better field configurations support
+bug report #540098 by lourenzo: Now tinyMCE preview works with fullsize
+bug report #516982 by guix: Links and Description are not working yet
+bug report #540002 by lourenzo: now using a new permission 'upload images'
+bug report #532998 by lourenzo: Allow WYSIWYG's new folder structure bug report #516984 by guix: Imagecache preset defaults to None when re-editing the tag
+bug report #521654 by Marek Turnovec, lourenzo: Fixing problem with table prefixes, plus a little code style improvement.
+
+
+
+ImageField_Assist 6.x-1.x-dev, 2009-07-04
+------------------------------
+by lourenzo: Updating documentation
+#509960 by igorik, lourenzo: Fixed missing sub-folders contents
+
+
+
+ImageField_Assist 6.x-1.x-dev, 2009-07-03
+------------------------------
+by lourenzo: Initial import, img_assist code adapted to use ImageField/ImageCache
+
+

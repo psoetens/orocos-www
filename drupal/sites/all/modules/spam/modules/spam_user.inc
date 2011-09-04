@@ -1,4 +1,10 @@
 <?php
+// $Id: spam_user.inc,v 1.1.2.1.2.7.2.3 2009/08/06 20:44:26 jeremy Exp $
+
+/**
+ * @file
+ * Include file for integration with the user system.
+ */
 
 /**
  *
@@ -87,7 +93,7 @@ function user_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
           spam_scan($user, 'user');
         }
         else {
-          if(isset($_SESSION['spam_form'])) {
+          if (isset($_SESSION['spam_form'])) {
             unset($_SESSION['spam_form']);
           }
         }
@@ -117,10 +123,12 @@ function user_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
         if (isset($arg1['signature'])) {
           $fields[$uid]['other'][] = 'signature';
         }
-        $result = db_query('SELECT name FROM {profile_fields}');
-        while ($profile = db_fetch_object($result)) {
-          if (isset($arg1[$profile->name])) {
-            $fields[$uid]['other'][] = $profile->name;
+        if (db_table_exists('profile_fields')) {
+          $result = db_query('SELECT name FROM {profile_fields}');
+          while ($profile = db_fetch_object($result)) {
+            if (isset($arg1[$profile->name])) {
+              $fields[$uid]['other'][] = $profile->name;
+            }
           }
         }
       }
@@ -173,7 +181,7 @@ function user_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
         module_invoke('user', 'user_operations_unblock', array($arg1));
       }
       break;
-      
+
     case 'unpublish':
       // TODO: When un/publish user, should probably also un/publish content
       if (is_numeric($arg1)) {
@@ -210,7 +218,6 @@ function user_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
       );
       // TODO: Show profile fields.
       return $form;
-    
   }
 }
 
@@ -218,13 +225,34 @@ function user_spamapi($op, $arg1 = NULL, $arg2 = NULL, $arg3 = NULL) {
  * Be sure we're scanning the latest profile data.
  */
 function spam_user_profile_update($user) {
-  $profile = array();
-
-  $result = db_query('SELECT fid, value FROM {profile_values} WHERE uid = %d', $user->uid);
-  while ($value = db_fetch_object($result)) {
-    $name = db_result(db_query('SELECT name FROM {profile_fields} WHERE fid = %d', $value->fid));
-    $user->$name = $value->value;
+  if (module_exists('profile')) {
+    profile_load_profile($user);
   }
   return $user;
 }
 
+/**
+ * Form alter gets its own function so we can reference &$form without causing
+ * errors in PHP4 installations.  (If we use spamapi, we have to set a default,
+ * which PHP4 doesn't support.)
+ */
+function user_spamapi_form_alter(&$form, &$form_state, $form_id) {
+  // Scan users before they are inserted into the database
+  if ($form_id == 'user_register' && is_array($form)) {
+    $form['#validate'][] = 'user_spam_scan';
+  }
+}
+
+/**
+ * Scan user before it is created in the database.
+ */
+function user_spam_scan($form, &$form_state) {
+  if ($form_state['clicked_button']['#value'] == t('Create new account')) {
+    $account = $form['#post'];
+    $_SESSION['spam_form'] = $form;
+    spam_scan($account, 'user');
+  }
+  else if (isset($_SESSION['spam_form'])) {
+    unset($_SESSION['spam_form']);
+  }
+}

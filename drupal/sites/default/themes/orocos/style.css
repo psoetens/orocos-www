@@ -8,16 +8,26 @@
 body {
   margin: 0;
   padding: 0;
-  color: #666666;
+  color: #212121;
   background-color: #fff;
   font: 90% Verdana, Arial, Helvetica, sans-serif;
+  width: 1050px;
+  margin-left: auto;
+  margin-right: auto;
 }
 tr.odd td, tr.even td {
   padding: 0.3em;
 }
 h1, h2, h3, h4, h5, h6 {
-  font-family: "Trebuchet MS", Geneva, Arial, Helvetica, SunSans-Regular, Verdana, sans-serif;
+  font-family: Arial,Helvetica,"Bitstream Vera Sans",sans-serif;
   margin: 0;
+}
+h2 {
+  border-bottom:1px dotted #545454;
+  line-height:1.3em;
+  margin-bottom:5px;
+  margin-top:0.769em;
+  padding-bottom:3px;
 }
 h1 {
   font-size: 1.3em;
@@ -52,12 +62,13 @@ fieldset {
 pre {
   background-color: #eee;
   padding: 0.5em;
-  font-size: 10px;
+  font-size: 1.1em;
   border: 1px solid #ddd;
 }
 table {
   /* make <td> sizes relative to body size! */
   font-size: 1em;
+  border-collapse: separate;
 }
 .form-item label {
   font-size: 1em;
@@ -86,6 +97,7 @@ table {
 #logo {
   vertical-align: middle;
   border: 0;
+  width: 60%;
 }
 #logo img {
   float: left;
@@ -171,7 +183,7 @@ table {
 .breadcrumb {
 margin-top: 1em;
 margin-right: 0px;
-margin-bottom: -16px;
+margin-bottom: 0px;
 margin-left: 163px;
 }
 .messages {
@@ -220,12 +232,18 @@ margin-left: 163px;
 ** additional rules /with only the differing properties!/ to .parent .class.
 ** See .comment .title for an example.
 */
-.title, .title a {
+.title {
   font-weight: bold;
   font-size: 1.2em;
   color: #347;
   margin: 0 auto 0 auto;  /* decrease default margins for h<x>.title */
   border-bottom: 1px solid #bbb;
+}
+.title a {
+  font-weight: bold;
+  font-size: 1.2em;
+  color: #347;
+  margin: 0 auto 0 auto;  /* decrease default margins for h<x>.title */
 }
 .submitted {
   color: #999;
@@ -251,6 +269,9 @@ margin-left: 163px;
   margin-bottom: 0.20em;
 }
 .block .title {
+  margin-bottom: .25em;
+}
+.main .title {
   margin-bottom: .25em;
 }
 .block-adsense {

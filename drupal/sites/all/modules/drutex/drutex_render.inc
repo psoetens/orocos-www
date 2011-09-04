@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_render.inc,v 1.21.2.3 2008/03/31 08:34:17 darthsteven Exp $
+// $Id: drutex_render.inc,v 1.22.4.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -13,16 +13,24 @@ function drutex_render_info($format = -1) {
   return (object) array(
     'title' => t('LaTeX Renderer'),
     'description' => t('Provides different environments to create rendered images (especially maths).'),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 0
   );
+}
+
+/**
+ * Implementation of subhook_filter_tips().
+ */
+
+function drutex_render_filter_tips($delta, $format, $long = FALSE) {
+  return t('Provides different environments to create rendered images (especially maths).');
 }
 
 /**
  * Implementation of subhook_defaults().
  */
 function drutex_render_defaults() {
-  $D['drutex_render_active'] = true;
+  $D['drutex_render_active'] = TRUE;
 
   /* relative to drutex/templates/render */
   $D['drutex_template_render'] = 'default.tex';
@@ -32,7 +40,7 @@ function drutex_render_defaults() {
 
   $D['drutex_pattern_render_imagemagick']      = 'cd [TMP_DIR]; TEXINPUTS="[DRUTEX_DIR]//:" latex -interaction=batchmode [HASH].tex'."\n".
                                       'convert -density [DPI] -trim [TMP_DIR]/[HASH].dvi [IMG_FILE]';
-  
+
   $D['drutex_pattern_render_dvipng_trans']      = 'cd [TMP_DIR]; TEXINPUTS="[DRUTEX_DIR]//:" latex -interaction=batchmode [HASH].tex'."\n".
                                       'dvipng -o [IMG_FILE] -D [DPI] -T tight -bg Transparent [TMP_DIR]/[HASH].dvi';
 
@@ -161,9 +169,7 @@ function drutex_render_filter_settings($format = -1) {
   }
 
   /* description for <custom conversion method> */
-  $description = t('* Leave blank and select dvipng or ImageMagick, to display a template for one of these commands in this box.') . '<br />'
-    . t('* Every line is executed in sequence, but in its own shell (so path changes aren\'t inherited).') . '<br />'
-    . t('Placeholders available:<br />
+  $description = t('* Leave blank and select dvipng or ImageMagick, to display a template for one of these commands in this box.') .'<br />'. t('* Every line is executed in sequence, but in its own shell (so path changes aren\'t inherited).') .'<br />'. t('Placeholders available:<br />
         [HASH] - hash (name) for the image<br />
         [TMP_DIR] - temporary dir (automatically cleaned)<br />
         [IMG_DIR] - directory where the images are saved<br />
@@ -193,7 +199,7 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
   $text = _drutex_unescape($text);
 
   if (drutex_submodule_is_active('security', $format)) {
-    if (drutex_security($text, $format) == false) {
+    if (drutex_security($text, $format) == FALSE) {
       return '<em class="error">Unallowed command detected!</em>';
     }
   }
@@ -204,9 +210,9 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
 
   $image_dir = drutex_var_get("drutex_dir_images_$format");
 
-  $template_dir = drutex_var_get('drutex_dir') . '/templates/render';
+  $template_dir = drutex_var_get('drutex_dir') .'/templates/render';
   $template_file = drutex_var_get("drutex_template_render_$format");
-  $template = $template_dir . '/' . $template_file;
+  $template = $template_dir .'/'. $template_file;
 
   $dpi = drutex_var_get("drutex_dpi_render_$format");
 
@@ -262,7 +268,7 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
 
         if (drutex_var_get("drutex_debug_$format")) {
           $level = ($cmd_retval == 0) ? WATCHDOG_NOTICE : WATCHDOG_WARNING;
-          watchdog('DruTeX', "Command: $cmd<br />Return value: $cmd_retval", $level);
+          watchdog('DruTeX', "Command: %cmd<br />Return value: %cmdret", array('%cmd' => $cmd, '%cmdret' => $cmd_retval), $level);
         }
       }
     }
@@ -275,24 +281,23 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
     }
     else {
       if ($success) {
-        watchdog('DruTeX', "$image_file was created. Temporary directory was $temporary_dir.", WATCHDOG_NOTICE);
+        watchdog('DruTeX', "%imgfile was created. Temporary directory was %tdir.", array('%imgfile' => $image_file, '%tdir' => $temporary_dir), WATCHDOG_NOTICE);
       }
       else {
-        watchdog('DruTeX', "$image_file couldn\'t be created. Temporary directory was $temporary_dir.", WATCHDOG_WARNING);
+        watchdog('DruTeX', "%imgfile couldn\'t be created. Temporary directory was %tdir.",  array('%imgfile' => $image_file, '%tdir' => $temporary_dir), WATCHDOG_WARNING);
       }
     }
   }
 
-  $img_url = drutex_get_image_url($format) . "/$hash.$image_type";
+  $img_url = drutex_get_image_url($format) ."/$hash.$image_type";
 
   if ($success) {
     $img_alt = _drutex_hide('set', check_plain($text));
-    $res = "<img class=\"teximage\" src=\"$img_url\" alt=\"$img_alt\" />";
+    $res = '<img class="teximage" src="'. $img_url .'" alt="'. $img_alt .'" />';
   }
   else {
     $res = '<em class="error">TeX Embedding failed!</em>';
   }
-
   if (!empty($attributes['tag'])) {
     $class_attr = empty($attributes['class']) ? '' : " class=\"{$attributes['class']}\"";
 
@@ -315,7 +320,6 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
     }
   }
 
-
   return $res;
 }
 
@@ -323,7 +327,7 @@ function drutex_render($text, $format = -1, $attributes = '', $default_attribute
  * Get a list with templates for drutex_render.
  */
 function _drutex_get_templates() {
-  $dir = drupal_get_path('module', 'drutex') . '/templates/render';
+  $dir = drupal_get_path('module', 'drutex') .'/templates/render';
 
   $A = file_scan_directory($dir, '.*\.tex');
   $B = array();

@@ -1,0 +1,13 @@
+; $Id: emailFilter.info,v 1.2 2009/08/29 14:02:57 philipnet Exp $
+name = emailFilter
+description = A filter that substitutes email style markup with divs so that they can be themed.
+package = "Input filters"
+dependencies[] = filter
+core = 6.x
+
+; Information added by drupal.org packaging script on 2010-03-17
+version = "6.x-1.1"
+core = "6.x"
+project = "emailFilter"
+datestamp = "1268854808"
+

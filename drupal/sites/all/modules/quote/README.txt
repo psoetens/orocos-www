@@ -27,15 +27,13 @@ The Quote filter should be activated for each input format that you want to have
 it available (input filters are edited via the 'administer/filters' interface).
 
 For best effect, the Quote filter must be applied *after* any filters that 
-replace HTML, and *before* the Linebreak filter. (Filters can be rearranged by 
-using the weight selectors within the 'rearrange filters' tab.)
+replace HTML, and *before* the Linebreak filter. Or conversely, if
+HTML filters consider <div> tags to be valid, the quote filter can be placed
+before them. Filters can be rearranged by using the weight selectors within the
+'rearrange filters' tab.
 
 Additionally, the Quote filter must be applied *before* the BBCode filter if you
 have the optional bbcode.module installed.
-
-Technically, the Quote filter is optional. If it is not activated, users will 
-see the raw code instead of the themed output (see FORMAT below to see examples
-of the raw code output).
 
 As the quote filter accesses the node (being quoted) directly, any content 
 within will be displayed without any processing. For example, if a user is 

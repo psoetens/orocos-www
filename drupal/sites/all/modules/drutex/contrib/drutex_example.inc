@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_example.inc,v 1.2 2006/09/06 02:25:41 dfg Exp $
+// $Id: drutex_example.inc,v 1.2.8.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -15,7 +15,7 @@ function drutex_example_info($format = -1) {
   return (object) array(
     'title' => t('Exampe submodule'),
     'description' => t('Provides some senseless stuff.'),
-    'toggle' => true, /* tells drutex if the user can activate/deactivate this submodule */
+    'toggle' => TRUE, /* tells drutex if the user can activate/deactivate this submodule */
     'weight' => 20 /* helps ordering the fieldsets on the configuration page */
   );
 }
@@ -24,7 +24,7 @@ function drutex_example_info($format = -1) {
  * Implementation of subhook_defaults().
  */
 function drutex_example_defaults() {
-  $D['drutex_blahtex_active'] = false;
+  $D['drutex_blahtex_active'] = FALSE;
   $D['drutex_example_sometext'] = 'This is the default text for drutex_example_sometext_$format.';
 
   return $D;

@@ -1,126 +1,216 @@
 <?php
-// $Id: path_redirect.install,v 1.2.2.17 2008/04/16 02:49:36 horsepunchkid Exp $
+// $Id: path_redirect.install,v 1.2.2.6.2.26 2009/12/01 05:40:09 davereid Exp $
 
+/**
+ * @file
+ * Install and uninstall schema and functions for the path_redirect module.
+ */
+
+/**
+ * Implement hook_schema().
+ */
+function path_redirect_schema() {
+  $schema['path_redirect'] = array(
+    'description' => 'Stores information on redirects.',
+    'fields' => array(
+      'rid'  => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique path redirect ID.',
+      ),
+      'source' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'The source path to redirect from.',
+      ),
+      'redirect' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'The destination path to redirect to.',
+      ),
+      'query' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'The query string to send to the destination.',
+      ),
+      'fragment' => array(
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => FALSE,
+        'description' => 'An internal page anchor append to the destination.',
+      ),
+      'language' => array(
+        'description' => 'The language this redirect is for; if blank, the alias will be used for unknown languages.',
+        'type' => 'varchar',
+        'length' => 12,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'type' => array(
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'description' => 'The HTTP status code to use for the redirect.',
+      ),
+      'last_used' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The timestamp of when the redirect was last used.',
+      ),
+    ),
+    'primary key' => array('rid'),
+    'unique keys' => array('source_language' => array('source', 'language')),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implement hook_install().
+ */
 function path_redirect_install() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      db_query("CREATE TABLE {path_redirect} (
-        rid int(10) NOT NULL,
-        path varchar(255) NOT NULL,
-        redirect varchar(255) NOT NULL,
-        query varchar(255) NOT NULL,
-        fragment varchar(50) NOT NULL,
-        type int(10) NOT NULL,
-        PRIMARY KEY (rid),
-        UNIQUE KEY path (path)
-        ) /*!40100 DEFAULT CHARACTER SET utf8 */;");
-      break;
-    case 'pgsql':
-      db_query("CREATE TABLE {path_redirect} (
-        rid SERIAL PRIMARY KEY,
-        path varchar(255) NOT NULL UNIQUE,
-        redirect varchar(255) NOT NULL,
-        query varchar(255) NOT NULL,
-        fragment varchar(50) NOT NULL,
-        type smallint NOT NULL
-        );");
-      break;
-  }
-  drupal_set_message(t('Database tables for the Path Redirect module have been installed.'));
+  drupal_install_schema('path_redirect');
 }
 
+/**
+ * Implement hook_uninstall().
+ */
+function path_redirect_uninstall() {
+  // Remove tables.
+  drupal_uninstall_schema('path_redirect');
 
+  // Remove variables.
+  variable_del('path_redirect_redirect_warning');
+  variable_del('path_redirect_allow_bypass');
+  variable_del('path_redirect_auto_redirect');
+  variable_del('path_redirect_purge_inactive');
+  variable_del('path_redirect_default_status');
+  variable_del('path_redirect_nodeapi_enabled');
+}
+
+/**
+ * Allow longer values for path and redirect. Add a unique key on rid.
+ */
 function path_redirect_update_1() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {path_redirect} MODIFY path VARCHAR(255)");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} MODIFY redirect VARCHAR(255)");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ADD UNIQUE (rid)");
-      break;
-  }
-  drupal_set_message(t('Database tables for the Path Redirect module have been updated.'));
-  return $ret;
-}
-
-function path_redirect_update_2() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      // Drupal 5 has a different drupal_goto() syntax that takes just the error code
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '300' WHERE type = 'HTTP/1.0 300 Multiple Choices'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '301' WHERE type = 'HTTP/1.0 301 Moved Permanently'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '302' WHERE type = 'HTTP/1.0 302 Found'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '303' WHERE type = 'HTTP/1.0 303 See Other'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '304' WHERE type = 'HTTP/1.0 304 Not Modified'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '305' WHERE type = 'HTTP/1.0 305 Use Proxy'");
-      $ret[] = update_sql("UPDATE {path_redirect} SET type = '307' WHERE type = 'HTTP/1.0 307 Temporary Redirect'");
-      // Now that we've got integers in the column, we change the column type - MySQL will convert values
-      $ret[] = update_sql("ALTER TABLE {path_redirect} MODIFY type int(10) NOT NULL");
-      break;
-  }
-  drupal_set_message(t('Database tables for the Path Redirect module have been updated.'));
-  return $ret;
-}
-
-function path_redirect_update_3() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {path_redirect} MODIFY type int(10) NOT NULL");
-      $ret[] = update_sql("UPDATE {sequences} SET name = '{path_redirect}_rid' WHERE name = '{path_redirect}'");
-      break;
-    case 'pgsql':
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ALTER type TYPE smallint USING type::smallint");
-      break;
-  }
-  $ret[] = update_sql("UPDATE {path_redirect} SET type = 307 WHERE type = 306");
-  drupal_set_message(t('Database tables for the Path Redirect module have been updated.'));
+  $ret = array();
+  db_change_field($ret, 'path_redirect', 'path', 'path', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE));
+  db_change_field($ret, 'path_redirect', 'redirect', 'redirect', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE), array('unique keys' => array('rid')));
   return $ret;
 }
 
 /**
- * Clear the menu cache since paths have changed; increase query string length.
- * Use rid as primary key; recreate unique key on path.
+ * Convert the type column to an integer to only store the status code.
  */
-function path_redirect_update_4() {
-  cache_clear_all(NULL, 'cache_menu');
-  drupal_set_message(t('Menu paths for the Path Redirect module have been updated.'));
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {path_redirect} MODIFY query varchar(255) NOT NULL");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} DROP PRIMARY KEY");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} DROP KEY rid");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ADD PRIMARY KEY (rid)");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ADD UNIQUE KEY (path)");
-      break;
-    case 'pgsql':
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ALTER query TYPE varchar(255)");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} DROP CONSTRAINT {path_redirect}_pkey");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} DROP CONSTRAINT {path_redirect}_rid_key");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ADD PRIMARY KEY (rid)");
-      $ret[] = update_sql("ALTER TABLE {path_redirect} ADD UNIQUE (path)");
-      break;
-  }
-  drupal_set_message(t('Database tables for the Path Redirect module have been updated.'));
+function path_redirect_update_2() {
+  $ret = array();
+
+  // Convert string status messages to integer status codes.
+  update_sql("UPDATE {path_redirect} SET type = '300' WHERE type = 'HTTP/1.0 300 Multiple Choices'");
+  update_sql("UPDATE {path_redirect} SET type = '301' WHERE type = 'HTTP/1.0 301 Moved Permanently'");
+  update_sql("UPDATE {path_redirect} SET type = '302' WHERE type = 'HTTP/1.0 302 Found'");
+  update_sql("UPDATE {path_redirect} SET type = '303' WHERE type = 'HTTP/1.0 303 See Other'");
+  update_sql("UPDATE {path_redirect} SET type = '304' WHERE type = 'HTTP/1.0 304 Not Modified'");
+  update_sql("UPDATE {path_redirect} SET type = '305' WHERE type = 'HTTP/1.0 305 Use Proxy'");
+  update_sql("UPDATE {path_redirect} SET type = '307' WHERE type = 'HTTP/1.0 307 Temporary Redirect'");
+
+  // Convert the type column to store integers now that all values are converted.
+  db_change_field($ret, 'path_redirect', 'type', 'type', array('type' => 'int', 'size' => 'small', 'not null' => TRUE));
+
   return $ret;
 }
 
-function path_redirect_uninstall() {
-  db_query('DROP TABLE {path_redirect}');
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      db_query("DELETE FROM {sequences} WHERE name = '{path_redirect}_rid'");
-      break;
-    case 'pgsql':
-      // Sequence is dropped automatically
-      break;
-  }
-  variable_del('path_redirect_allow_bypass');
-  variable_del('path_redirect_nodeapi_enabled');
-  variable_del('path_redirect_redirect_warning');
-  drupal_set_message(t('Database tables for the Path Redirect module have been removed.'));
+/**
+ * Fix a typo that could have caused the code 306 to be used mistakenly.
+ */
+function path_redirect_update_3() {
+  $ret = array();
+  $ret[] = update_sql("UPDATE {path_redirect} SET type = 307 WHERE type = 306");
+  return $ret;
 }
+
+/**
+ * Allow longer values for query strings fix the primary and unique keys.
+ */
+function path_redirect_update_4() {
+  $ret = array();
+
+  // Allow longer query strings.
+  db_change_field($ret, 'path_redirect', 'query', 'query', array('type' => 'varchar', 'length' => 255, 'not null' => FALSE));
+
+  // Change the primary key from path to rid and add a unique key on path.
+  db_drop_primary_key($ret, 'path_redirect');
+  db_drop_unique_key($ret, 'path_redirect', 'rid');
+  db_add_primary_key($ret, 'path_redirect', array('rid'));
+  db_add_unique_key($ret, 'path_redirect', 'path', array('path'));
+
+  return $ret;
+}
+
+/**
+ * Backporting schema for successful upgrades to 6.x.
+ */
+function path_redirect_update_5100() {
+  $ret = array();
+  db_change_field($ret, 'path_redirect', 'rid', 'rid', array('type' => 'serial', 'not null' => TRUE));
+  db_change_field($ret, 'path_redirect', 'query', 'query', array('type' => 'varchar', 'length' => 255, 'not null' => FALSE));
+  db_change_field($ret, 'path_redirect', 'fragment', 'fragment', array('type' => 'varchar', 'length' => 50, 'not null' => FALSE));
+  db_change_field($ret, 'path_redirect', 'type', 'type', array('type' => 'int', 'size' => 'small', 'not null' => TRUE));
+  return $ret;
+}
+
+/**
+ * @defgroup updates-6.x-extra Extra path_redirect updates for 6.x
+ * @{
+ */
+
+/**
+ * Add a last used timestamp field.
+ */
+function path_redirect_update_6100() {
+  $ret = array();
+  db_add_field($ret, 'path_redirect', 'last_used', array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0));
+  $ret[] = update_sql("UPDATE {path_redirect} SET last_used = " . time());
+  return $ret;
+}
+
+/**
+ * Add a language field.
+ */
+function path_redirect_update_6101() {
+  $ret = array();
+  db_drop_unique_key($ret, 'path_redirect', 'path');
+  db_add_field($ret, 'path_redirect', 'language', array('type' => 'varchar', 'length' => 12, 'not null' => TRUE, 'default' => ''));
+  db_add_unique_key($ret, 'path_redirect', 'path_language', array('path', 'language'));
+  return $ret;
+}
+
+/**
+ * Replace frontpage paths with '<front>'.
+ */
+function path_redirect_update_6102() {
+  $ret = array();
+  $frontpage = variable_get('site_frontpage', 'node');
+  $ret[] = update_sql("UPDATE {path_redirect} SET redirect = '<front>' WHERE redirect = '$frontpage'");
+  return $ret;
+}
+
+/**
+ * Rename the path field to source.
+ */
+function path_redirect_update_6103() {
+  $ret = array();
+  db_drop_unique_key($ret, 'path_redirect', 'path_language');
+  db_change_field($ret, 'path_redirect', 'path', 'source', array('type' => 'varchar', 'length' => 255, 'not null' => TRUE));
+  db_add_unique_key($ret, 'path_redirect', 'source_language', array('source', 'language'));
+  return $ret;
+}
+
+/**
+ * @} End of "defgroup updates-6.x-extra"
+ * The next series of updates should start at 7000.
+ */

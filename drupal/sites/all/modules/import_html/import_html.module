@@ -1,9 +1,17 @@
 <?php
+// $Id: import_html.module,v 1.71.2.16 2009/10/06 14:09:02 dman Exp $
+
 /**
- * @file
- * @mainpage
- * Facility to import an existing, static HTML site structure
- * into the Drupal CMS as structured nodes.
+ * @file Main drupal interface to import_html.
+ *
+ * This file contains Drupal hooks
+ * and some config/preferences. Actual processing functions are in
+ * import_html_process.inc
+ *
+ * Synopsis:
+ *
+ * Facility to import an existing, static HTML site structure into the Drupal
+ * CMS as structured nodes.
  *
  * Intent:
  *
@@ -15,16 +23,31 @@
  *
  * See import_html_help.htm for more
  *
- * This module has no public face at all - it's purely admin.
- * It supplies no Blocks, and is only accessible via the Admin menu.
+ * Main data extraction routines are in import_html_process.inc. Module-specific
+ * data extraction methods have been shifted into import_html_modules.inc UI
+ * forms and themes have been shifted to import_html_ui.inc.
+ * Drupal hooks and some configs remain in this module file.
  *
- * @package coders
+ * import_html libraries can be used by external modules, specifically wrapper.
+ * module (private development) and static.module (experimental)
+ *
+ * CODE:
+ * Internally, there are a lot of filepath fragments being passed around.
+ * Any filepath known to represent a folder (eg $source_siteroot) will end with
+ * a /. Path fragments or filenames do NOT begin with a /. This makes
+ * concatenation pretty reliable, even with empty strings and not worrying about
+ * dividers. However, many times, small functions like 'ensure_trailing_slash()'
+ * may be called. Not all of them are needed, but most of them were put in due
+ * to some wierd filesystem vagery or filename encountered.
+ *
+ *
+ * @ingroup import_html Import HTML
+ *
  * @author Dan Morrison http://coders.co.nz/
- * @version $Id: import_html.module,v 1.51.2.10 2007/05/01 08:38:51 dman Exp $
  *
  */
 
-$import_html_library_path = drupal_get_path('module', 'import_html') . '/coders_php_library';
+$import_html_library_path = drupal_get_path('module', 'import_html') .'/coders_php_library';
 set_include_path($import_html_library_path . PATH_SEPARATOR . get_include_path());
 
 /**
@@ -32,46 +55,46 @@ set_include_path($import_html_library_path . PATH_SEPARATOR . get_include_path()
  * Used for testing only
  * @{
  */
-if(! function_exists('debug')){
-  require_once 'debug.inc';
-  define('DEBUGLEVEL', 0);
-  define('DEBUGBACKTRACE',  8);
+if (! function_exists('debug')) {
+  module_load_include('inc', 'import_html', 'coders_php_library/debug');
+#  define('DEBUGLEVEL', 0);
 }
-# debug_set_level(4);
+#debug_set_level(3);
 
 /**
  * @}
  */
 
-require_once "xml-transform.inc";
-require_once "file-routines.inc";
+// Split into libraries in prep for D6
+module_load_include('inc', 'import_html', 'import_html_ui');
+
 
 /**
- * @name import_html_file_classes
+ * @name $_import_html_file_classes
  * poor-mans mime-list
  */
 
-global $import_html_file_classes;
-$import_html_file_classes = array (
-  "htm" => "page",
-  "html" => "page",
-  "shtml"=> "page",
-  "php" => "page",
-  "asp" => "page",
-  "aspx" => "page",
-  "jsp" => "page",
+global $_import_html_file_classes;
+$_import_html_file_classes = array(
+  "htm"   => 'html',
+  "html"  => 'html',
+  "shtml" => 'html',
+  "php"   => 'html',
+  "asp"   => 'html',
+  "aspx"  => 'html',
+  "jsp"   => 'html',
 
-  "gif" => "image",
-  "jpg" => "image",
-  "png" => "image",
+  "gif"   => "image",
+  "jpg"   => "image",
+  "png"   => "image",
 
-  "css" => "resource",
-  "js" => "resource",
-  "swf" => "resource",
+  "css"   => "resource",
+  "js"    => "resource",
+  "swf"   => "resource",
 
-  "pdf" => "document",
-  "txt" => "document",
-  "rtf" => "document"
+  "pdf"   => "document",
+  "txt"   => "document",
+  "rtf"   => "document"
 );
 
 // How to handle duplicates and other problems when importing
@@ -80,80 +103,105 @@ define("IMPORT_HTML_MERGE", 1);
 define("IMPORT_HTML_GUESS", 2);
 define("IMPORT_HTML_DEFAULT", 4);
 
-define("IMPORT_HTML_MAX_LABEL_LENGTH",24);
+define("IMPORT_HTML_MAX_LABEL_LENGTH", 24);
+
+define('IMPORT_HTML_ADMIN_PATH', 'admin/build/import_html');
+
+
+define('IMPORT_HTML_GLOB_BEFORE', 'glob before');
+define('IMPORT_HTML_RECURSE_AFTER', 'recurse after ');
 
 /**
- * Implementation of hook_menu().
+ * To avoid overloading the treeview display, directory listing depth recursion
+ * will be truncated if the number of found files is greater than this.
+ */
+define('IMPORT_HTML_MAX_FILE_LISTING_COUNT', 500);
+
+/**
+ * If the database max_allowed_packet size is limited, then huge batch jobs
+ * cannot be queued - the list of instructions is too long!
+ * 16M is a common default, but shared hosts may have something useless like
+ * 1M . Here is the recommended minimum, in Mb.
+ * You should be able to process 4000 pages in one go with 4M
+ */
+define('IMPORT_HTML_REQUIRED_MAX_ALLOWED_PACKET', 11); // Megs
+
+/**
+ * Implementation of hook_menu() .
  *
  * Declares all the menu items relating to this module
  * And all the public functions it supplies
  */
-function import_html_menu($may_cache)
-{
-  if ($may_cache)
-  {
-    $items[] = array (
-      'path' => 'admin/import_html',
-      'title' => t('Import HTML'), 
-      'description' => t("Import/Export an entire site to/from static HTML"),
-      'callback' => 'system_admin_menu_block_page',
-      'access' => user_access('access import_html'), 
-      'type' => MENU_NORMAL_ITEM,
-    );
-    $items[] = array(
-      'path' => 'admin/import_html/settings',
-      'title' => t('Import HTML Settings'),
-      'description' => t('Adjust the import_html options and settings.'),
-      'callback' => 'drupal_get_form',
-      'weight' => 1,
-      'callback arguments' => array('import_html_admin_settings'),
-      'access' => user_access('administer site configuration'),
-      'type' => MENU_NORMAL_ITEM,
-    );
-    $items[] = array (
-      'path' => 'admin/import_html/import_site',
-      'title' => t('Import HTML Site'), 
-      'description' => t("Import/Export an entire site to/from static HTML"),
-      'weight' => -1,
-      'callback' => 'import_html_page', 
-      'access' => user_access('access import_html'), 
-      'type' => MENU_NORMAL_ITEM,
-    );
-    $items[] = array (
-      'path' => 'admin/import_html/list_filesystem',
-      'title' => t('List files to import'), 
-      'description' => t('List files to import.'),
-      'callback' => 'import_html_list_filesystem_callback', 
-      'access' => user_access('access import_html'), 
-      'type' => MENU_CALLBACK,
-    );
-    $items[] = array (
-      'path' => 'admin/import_html/import_files',
-      'title' => t('Import the selected files'), 
-      'description' => t('Import the selected files.'),
-      'callback' => 'import_html_import_files_page', 
-      'access' => user_access('access import_html'), 
-      'type' => MENU_CALLBACK,
-    );
-    $items[] = array (
-      'path' => 'admin/import_html/demo',
-      'title' => t('Demo'), 
-      'description' => t('Demonstrate or test HTML Import on one file.'),
-      'callback' => 'drupal_get_form',
-      'callback arguments' => array('import_html_demo_form'),
-      'access' => user_access('access import_html'),
-      'type' => MENU_NORMAL_ITEM,
-    );
-  }
-  return $items ? $items : array ();
+function import_html_menu() {
+  $items[IMPORT_HTML_ADMIN_PATH] = array(
+    'title' => 'Import HTML',
+    'description' => "Import/Export an entire site or directory to/from static HTML",
+
+    // Use the built-in Overview menu thing
+    'page callback' => 'system_admin_menu_block_page',
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+
+    'access arguments' => array('access import_html'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items[IMPORT_HTML_ADMIN_PATH .'/settings'] = array(
+    'title' => 'Import HTML Settings',
+    'description' => 'Adjust the import_html options and settings.',
+    'page callback' => 'drupal_get_form',
+    'file' => 'import_html_ui.inc',
+    'weight' => 1,
+    'page arguments' => array('import_html_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items[IMPORT_HTML_ADMIN_PATH .'/profile'] = array(
+    'title' => 'Import profiles',
+    'description' => 'Edit multiple import profiles.',
+    'page callback' => 'import_html_profiles_page',
+    'file' => 'import_html_ui.inc',
+    'weight' => 2,
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items[IMPORT_HTML_ADMIN_PATH .'/import_site'] = array(
+    'title' => 'Import HTML Site',
+    'description' => "Import/Export an entire site to/from static HTML",
+    'weight' => -1,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('import_html_process_form'),
+    'file' => 'import_html_ui.inc',
+    'access arguments' => array('access import_html'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items[IMPORT_HTML_ADMIN_PATH .'/demo'] = array(
+    'title' => 'Demo',
+    'weight' => 3,
+    'description' => 'Demonstrate or test HTML Import on one file.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('import_html_demo_form'),
+    'file' => 'import_html_ui.inc',
+    'access arguments' => array('access import_html'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items[IMPORT_HTML_ADMIN_PATH .'/results'] = array(
+    'title' => 'Import Results Summary',
+    'weight' => 5,
+    'description' => "View log of recent import messages",
+    'page callback' => 'import_html_results',
+    'file' => 'import_html_ui.inc',
+    'access arguments' => array('access import_html'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items ? $items : array();
 }
 
 /**
- * Hook Implimentation
+ * Hook Implementation
  */
-function import_html_perm()
-{
-  return array (
+function import_html_perm() {
+  return array(
     'access import_html'
   );
 }
@@ -164,2359 +212,202 @@ function import_html_perm()
  * @param $section string Context this help is being called from
  * @return string
  */
-function import_html_help($section)
-{
-  switch ($section)
-  {
+function import_html_help($path, $arg) {
+  switch ($path) {
     case 'admin/build/modules#description' :
       return t("Import/Export an entire site to/from static HTML");
     case 'admin/build/modules/import_html' :
       return t("Import/Export an entire site to/from static HTML");
     case 'admin/help#import_html' :
-      return file_get_contents(drupal_get_path("module", "import_html") . "/import_html_help.htm");
-    case 'admin/import_html' :
-      return l("DO check the help page, this is a complex process",'admin/help/import_html');
+      return file_get_contents(drupal_get_path("module", "import_html") ."/help/import_html_help.html");
+    case IMPORT_HTML_ADMIN_PATH :
+      return l("DO check the help page, this is a complex process", 'admin/help/import_html');
     case 'admin/settings/import_html' :
-      return l("DO check the help page, this is a complex process",'admin/help/import_html');
-  }
-  return false;
-}
-
-/**
- * Hook Implimentation
- */
-function import_html_nodeapi(& $node, $op, $teaser, $page)
-{
-  switch ($op)
-  {
-
-    /* - all this does not work - Validation happens too quick, the title is looked for before I can set it. */
-    // Validation barfs if a node doesn't have a title
-    // But if I'm using import_html filter, the title has been dropped into the body
-    // and we'll get it out very soon.
-    // So, if the import_html_filter has been invoked, drop a placeholder
-    // into the title field to pass validation until we get a chance to see the real text.
-    // Pity debug() happend before filter()
-    case 'validate' :
-      // check import_html_filter is active
-      // We do that by checking the given nodes 'format' parameter
-      if (isset ($node->format))
-      {
-        $filters = filter_list_format($node->format);
-        // And seing if it contains the import_html page filter flag
-        if (isset ($filters['import_html/0']))
-        {
-          // So dump in a placeholder to the title
-          if (!($node->title))
-          { // Unless it IS already there
-            $node->title = "import_html placeholder";
-            form_set_error("title", NULL); // try and clear the error flag
-          }
-        }
-      }
-      break;
-
-    case 'form param' :
-      if ($_GET['q'] == "import_html/import_files")
-      {
-        // If we are displaying a node/add form, it should be treated as a node/add from now on,
-        // Change the form action to say that it's a node/add problem now, take it from here
-        return (array (
-          'action' => url('node/add/page'
-        )));
-      }
-      break;
-  }
-}
-
-/**
- * Main import wizard start page.
- *
- * Display the main import_html admin screen.
- * Display the files found in the requested directory.
- *
- * The actual heavy lifting is done in import_html_list_filesystem()
- * @see import_html_list_filesystem()
- * @see import_html_page_form()
- */
-function import_html_page()
-{
-  
-  if (!module_exists('path')){
-    drupal_set_message(t("The <b>path</b> module is not enabled! If you try to import pages without paths, I can do it, but links won't work and you'll find it hard to find the pages again.'"),'error');
-  }
-
-  $output = t("
-            <p>
-              For background, remember to read <a href='!help_link'>the Import Html help page</a>.
-              The <a href='!settings_link'>settings page</a> contains the config options.
-            </p>", 
-    array ( '!help_link' => url('admin/help/import_html'),  '!settings_link' => url('admin/import_html/settings') )
-  );
-  $output .= t("
-            <p>
-              For a quick intro, try <a href='!link'>a quick demo</a>.
-            </p>", 
-    array ('!link' => url('admin/import_html/demo'))
-  );
-
-  $intro = t("
-            <p>
-              The source website files must be directly available to this server.
-              This process will NOT yet import the structure of a client website to a remote server,
-              or spider all the resources of a remote site.
-              Using the browse feature below will only work if you are on the actual server itself.
-            </p>");
-  $output .= theme_box(t("About Importing"), $intro . import_html_settings_summary() );
-
-  $output .= drupal_get_form('import_html_select_source_form');
-
-
-  $output .= t("
-    <p>
-      <b>Note</b> Big sites <i>will</i> take a long time to process,
-      and processing may timeout. 
-      You can either increase the php timeout value and wait around, 
-      or just do sections at a time by using the subsection parameter above.
-    </p>");
-
-  print theme('page', $output);
-}
-
-
-function import_html_select_source_form(){
-  $form = array (
-    '#method' => 'post',
-    '#action' => url('admin/import_html/list_filesystem'),
-  );
-  $form['#submit']['import_html_select_source_submit']=array();
-
-  $form['htmlsource'] = array (
-    '#type' => 'fieldset',
-    '#title' => t("Select HTML file source"),
-  );
-
-  $form['htmlsource']['source_siteroot'] = array (
-    '#type' => 'textfield',
-    '#title' => t("Site Root on the Server"), 
-    '#default_value' => variable_get('import_html_siteroot', "/www/htdocs/"), 
-    '#description' => t("
-      <b>If the files are on the server</b> (local to Drupal) 
-      Enter the absolute location of the site to import. 
-      You must have access permissions. 
-      Relative paths and aliases will be calculated from here.
-    "),
-  );
-
-  $form['htmlsource']['import_html_current_subsection'] = array (
-    '#type' => 'textfield',
-    '#title' => t("Subsection to list"), 
-    '#default_value' => variable_get('import_html_current_subsection','' ),
-    '#size' => 20,
-    '#description' => t("
-      For large sites, its more convenient to just list and process sections.
-      If a subdirectory is specified, only that will be displayed."
-    ),
-  );
-
-  $form[] = array (
-    '#type' => 'submit',
-    '#value' => t('Next'),
-  );
-
-  // allow user to change some of the big settings here also
-  // Set a callback so these settings get saved generically, persistantly
-  $form['#submit']['import_html_subsettings_submit']=array();
-  $form['import_html_settings'] = import_html_subsettings_form();
-  $form['import_html_settings']['#type'] = 'fieldset';
-  $form['import_html_settings']['#collapsible'] = TRUE;
-  $form['import_html_settings']['#collapsed'] = TRUE;
-  $form['import_html_settings']['#title'] = t("More Settings");
-
-  return $form; 
-}
-
-
-/**
- * Source root has been selected, display the files
- * The actual heavy lifting is done in import_html_list_filesystem()
- * @see import_html_list_filesystem()
- */
-function import_html_select_source_submit($form_id,$edit){
-  // Figure which path we were asked to scan
-  // tidy the inputs.
-  $base_path = foreslash($edit['source_siteroot']);
-  variable_set('import_html_siteroot', $base_path);
-
-  $current_subsection = ensure_trailing_slash($edit['import_html_current_subsection']);
-  $current_subsection = preg_replace('|^/|', '', $current_subsection);
-  variable_set('import_html_current_subsection', $current_subsection);
-
-  return FALSE;
-}
-
-
-
-
-/**
- * Display the import_html options and settings.
- *
- * Settings menu callback
- */
-function import_html_admin_settings()
-{
-  $form = array(); 
-
-  $form['summary'] = array('#value' => import_html_settings_summary());
-
-  // check htmltidy is present and correct
-  //  include_once 'tidy-functions.inc';
-  include_once 'install-htmltidy.inc';
-  if ($_POST['op'] == t('install htmltidy binary'))
-  {
-    htmltidy_install();
-  }
-  $warning = ''; // a return container handle
-  if (!htmltidy_test($warning))
-  {
-    drupal_set_message('HTMLTidy executable is not available. ' . $warning, 'error');
-
-    $form['HTMLTidy'] = array(  
-      '#type' => 'fieldset',
-      '#title' => 'Install',
-      '#collapsible' => TRUE,
-    );
-    $form['HTMLTidy']['htmltidy_apppath'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Path to HTMLTidy executable'),
-      '#default_value' => variable_get('htmltidy_apppath', '/usr/local/bin/tidy'),
-      '#size' => 40,
-      '#maxlength' => 100,
-      '#description' => t("
-        We require the HTML Binary to be available on the server. Please
-        <a href='http://tidy.sourceforge.net/'>download and install it</a>
-        wherever you can, then tell me where to find it.
-      "),
-    );
-    $form['HTMLTidy'][] = array( 
-      '#value' => t("
-        If you are unable to install the htmltidy binary yourself, 
-        try this button to download and unpack it on the server 
-        (Linux only so far).
-      ")
-    );
-    $form['HTMLTidy']['install_button'] = array(
-      '#type' => 'submit',
-      '#value' => t('install htmltidy binary')
-    );
-    $form['HTMLTidy'][] = array( 
-      '#value' => t("
-        There is a <i>small</i> chance it will work for you, 
-        but configurations are different everywhere. 
-        This will work only on Linux, Windows users can just 
-        <a href='http://tidy.sourceforge.net/'>get the exe</a> 
-        and drop it in this directory.
-      ")
+      return l("DO check the help page, this is a complex process", 'admin/help/import_html');
+    case 'admin/build/import_html/import_site' :
+      $output = t("<p>
+          For background, remember to read <a href='!help_link'>the Import Html help page</a>.
+          The <a href='!settings_link'>settings page</a> contains the config options.
+        </p>",
+        array(
+          '!help_link' => url('admin/help/import_html'),
+          '!settings_link' => url(IMPORT_HTML_ADMIN_PATH .'/settings'),
+        )
       );
-  }
-  else
-  {
-    $form['HTMLTidy']=array(
-      '#value' => t("<p>HTMLTidy is present and correct: " . $warning . "</p>")
-    );
-  }
+      return $output;
 
-  // Warn about known problem with open_basedir
-  if($open_basedir = ini_get('open_basedir')){
-    $form['open_basedir']=array(
-      '#value' => t("<p><strong>Warning:</strong> This server has open_basedir restrictions set [%open_basedir]. It's possible that external source directories may be inaccessible. <a href='%help_url'>Check the help for more details</a>.</p>",array('%open_basedir'=>$open_basedir,'%help_url'=>url('admin/help/import_html','','open_basedir')))
-    );
-  }
+    case 'admin/build/import_html/demo' :
+      return t("<p>
+        Enter one HTML filepath or URL to process as an import.
+        The retrieved data <em>will not</em> automatically become part of the
+        site unless you confirm it, it's just a demo of what data would be
+        extracted on a simple import.
+      </p><p>
+        The given file will be passed through the currently configured import process
+        and shown as a node-edit form, displaying all the deduced content in the appropriate fields.
+      </p><p>
+        If you see <em>too much</em> of the page in the 'body' area (nested navbars and layout)
+        then the XSL import template or selector needs to be made more specific.
+        If you see none, or not enough content in the body area, the template or
+        selector needs to be adjusted to encompass the text correctly.
+      </p><p>
+        If you get an error or no result, the input HTML is probably too invalid to work with.
+      </p><p>
+        Single demo imports do not have the full context information to work with,
+        so the menu or URL alias (and internal relinking) shown may not be representative of the real result.
+      </p>");
 
-
-  $form['extraction'] = array(  
-    '#type' => 'fieldset',
-    '#title' => t('Import and Content Analysis Options'),
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
-  );
-  $form['extraction'][] = array( 
-    '#value' => t("How the content is extracted from the source documents."),
-  );
-
-  $form['extraction']['import_html_translation_template'] = array(
-    '#type' => 'textfield',
-    '#title' => t('HTML Translation Template'),
-    '#default_value' => variable_get('import_html_translation_template', "html2simplehtml.xsl"),
-    '#size' => 40,
-    '#maxlength' => 100,
-    '#description' => t("
-      This file must be a valid XSL Template that can convert from your source
-      HTML to the drupal XML schema. The path defined here will be searched
-      for first in the current module directory, and then relative to the
-      <code>files</code> directory.
-    "),
-  );
-
-  $form['extraction']['import_html_content_tag_id'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Content Tag ID'),
-    '#default_value' => variable_get('import_html_content_tag_id', 'main'),
-    '#size' => 20,
-    '#maxlength' => 100,
-    '#description' => t("
-      If your source document is structured well enough to have the actual
-      content in a named div or something (&lt;div id='main'&gt;...content )
-      what is that name?
-      The default template will search for 'main','copy','story','text',and
-      'bodyCopy'. If your input uses another label, set it here.
-    "),
-  );
-
-
-  $form['extraction']['import_html_content_type'] = array(
-    '#type' => 'select',
-    '#title' => t("Node Type for new pages"),
-    '#options' => node_get_types('names'),
-    '#default_value' => variable_get('import_html_content_type', "page"),
-    '#description' => t("
-      Note, if importing into a CCK content type, or anything that doesn't 
-      store its body in the node 'body', some customization will have to be done on your XSL template.
-    ")
-  );
-
-  // Just a select, the filter radios are much to bulky for here.
-  $form['extraction']['import_html_preferred_filter'] = array(
-    '#type' => 'select',
-    '#title' => t("Default Input Filter"),
-    '#default_value' => import_html_get_preferred_filter(),
-    '#options' => import_html_get_preferred_filter(TRUE),
-    '#description' => t("
-      After importing HTML, the end result may still have a standard filter
-      applied to it internally. Normally 'Full HTML' is correct here,
-      although it may create unwanted hard breaks. Use 'Unfiltered HTML'
-      if you want the content verbatim.
-      Modify only if you want to strip the source right down, execute php,
-      or do other filter magic on the input.
-    "),
-  );
-
-  $form['extraction']['import_html_default_document'] = array(
-    '#type' => 'textfield',
-    '#title' => t("Default Document"),
-    '#default_value' => variable_get('import_html_default_document', "index.htm"),
-    '#size' => 40,
-    '#maxlength' => 40,
-    '#description' => t("
-      What is the default document name for pages served in directories on
-      the current site (index.htm, index.html, default.asp, index.php)?
-      When documents of this name are imported, they can be given both
-      the old name (my/dir/index.htm) and a friendly directory name (my/dir).
-      When the navigation menu is built, this file is served when the
-      directory link is clicked.
-      This should end up emulating normal website navigation behaviour.
-    "),
-  );
-
-  
-  $form['extraction']['import_html_file_exclusions'] = array(
-    '#type' => 'textarea',
-    '#title' => t("File Exclusion Pattern"),
-    '#default_value' => variable_get("import_html_file_exclusions","^_\n/_\nCVS\n^\.\n/\."),
-    '#description' => t("
-      When listing files to import, some sources should probably be left behind.
-      Enter a set of regular expressions to check against the file<b>path</b>
-      that should <em>not</em> show up on the import screen.
-      <ul><li>
-      <code>^_</code> - begins with '_'
-      <code>/_</code> - in a dir that begins with '_'
-      </li><li>
-      <code>CVS/?</code> - called CVS, or has CVS in the path
-      </li></ul>
-    "),
-  );
-
-  $form['extraction']['import_html_strip_tables'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Remove table markup"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_strip_tables', FALSE),
-    '#description' => t("
-      A common task when updating old sites is removing the
-      legacy formatting tables. While we are going through the
-      pages, this process can do it all for you.
-      Beware - enabling this will remove ALL tables, so don't
-      try it if there are genuine data tables you wish to retain!
-    "),
-  );
-
-  
-  $form['replication'] = array(
-    '#type' => 'fieldset',
-    '#title' => t("Replication Options"),
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
-  );
-  $form['replication'][] = array( 
-    '#value' => t("How and where the imported content is reproduced on this site. (requires path.module).")
-  );
-
-  if (!module_exists('path')){
-    drupal_set_message(t("The <b>path</b> module is not enabled! If you try to import pages without paths, I can do it, but links won't work and you'll find it hard to find the pages again.'"),'error');
-  }
-
-  $form['replication']['import_html_trim_suffixes'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Trim Suffixes"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_trim_suffixes', TRUE),
-    '#description' => t("
-      When importing files, new url_aliases will be generated based on the
-      old path. Optionally, the new primary alias can have the suffix
-      chopped of. So <code>old/path/file.htm</code> wil be accessed as just
-      <code>old/path/file</code> and <code>old/section/index.htm</code>
-      will become <code>old/section</code>.
-      Uncheck this if you do NOT want this tidy behaviour.
-      <br/>Note, this aliasing is needed to detect when an import is
-      <em>replacing</em> a previously imported page. Disabling it may
-      cause you to end up with duplicates if importing the same file again.
-      <br/>This just defines the name given to the page, it does not
-      automatically update any links <em>to</em> the page (see below).
-    "),
-  );
-
-  $form['replication']['import_html_legacy_aliases'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Legacy Aliases"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_legacy_aliases', TRUE),
-    '#description' => t("
-      Optionally, a secondary alias can be made that DOES have the old
-      full suffix. This supports old links and hrefs.
-      The new node may end up with two aliases (thats OK) but the tidy
-      one will be used internally by default.
-      Uncheck this if you do NOT want old URL support.
-      These two options are independant of each other. If both are off
-      the new page will have no url_alias.
-    "),
-  );
-  
-  $form['replication']['import_html_relink_files'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Try to Relink Files by discarding suffixes"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_relink_files', FALSE),
-    '#description' => t("
-      <b>If</b> you choose not to support the Legacy Aliases suffixes
-      on your new pages, <em>existing links to those pages will break</em>.
-      This includes inline links from within the content we are importing.
-      <br/>If a page linked to /home/about.htm and you have renamed it
-      to home/about, the old link will be broken.
-      This tool is a batch job process, not an entire site spider and
-      relinker.
-      <br/>
-      <b>But</b> if you understand exactly what is going on,
-      you can choose to try and rewrite all local links to their shortname
-      equivalent (basically dropping off the suffixes of linked files)
-      during import.
-      This will convert any existing <code>href=\"local/path/file.htm\"</code>
-      into just <code>href=\"local/path/file\"</code>. Use with care, but
-      this option plus \"Trim Suffixes\" should be able to work together to
-      rename all files. You\'ll want to run a link checker afterwards!
-    "),
-  );
-
-  $form['replication']['import_html_allow_bad_urls'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Allow bad URLs and filenames"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_allow_bad_urls', FALSE),
-    '#description' => t("
-      It's bad mojo to have spaces or non-alphanumeric characters
-      in your filenames and in your URLs. Normally I try to fix this
-      by replacing potentially damaging characters with an underscore.
-      If, however you have to support legacy stuff like 
-      'Random filename #3 - & about what?.pdf' then we can try to leave them alone.
-      May not always work the way you expect. 
-    "),
-  );
-
-    
-  $form['replication']['import_html_file_storage_path'] = array(
-    '#type' => 'textfield',
-    '#title' => t("Extra File Storage Path"),
-    '#default_value' => ensure_trailing_slash(variable_get('import_html_file_storage_path', variable_get('file_directory_path', 'files') . "/imported/")),
-    '#size' => 20,
-    '#maxlength' => 100,
-    '#description' => t("
-      Where, beneath siteroot, should extra imported <strong>files</strong>
-      be stored. Images and suchlike will be put into a heirachy mirroring
-      their old location, but all under this directory.
-    "),
-  );
-  
-  $form['replication']['import_html_import_site_prefix'] = array(
-    '#type' => 'textfield',
-    '#title' => t("Import Site Prefix"),
-    '#default_value' => ensure_trailing_slash(variable_get('import_html_import_site_prefix', 'imported/')),
-    '#size' => 20,
-    '#maxlength' => 100,
-    '#description' => t("
-      Where, beneath siteroot, should extra imported <strong>pages</strong>
-      <em>appear to be</em> served from? If you wish to keep the imported
-      pages separate from the main site, setting this value to look like a
-      subdirectory will make the imported site act like a subsite.
-      Otherwise leave it blank and new pages will be added under the top
-      level navigation.
-    "),
-  );
-
-  $form['replication']['subsettings'] = import_html_subsettings_form();
-  
-
-  $form['advanced'] = array(
-    '#type' => 'fieldset',
-    '#title' => t("Advanced Import Tuning"),
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
-  );
-  
-  $form['advanced']["help"] = array(
-   '#value' => t("How to handle problems when importing"),
-  );
-  
-  $form['advanced']['import_html_handle_duplicates'] = array(
-    '#type' => 'select',
-    '#title' => t("Duplicate Handling"),
-    '#default_value' => variable_get('import_html_handle_duplicates', IMPORT_HTML_MERGE),
-    '#options' => array(IMPORT_HTML_MERGE=>'overwrite/merge' ,IMPORT_HTML_SKIP=>'skip'),
-    '#description' => t("
-      If attempting to import a file into a path that already exists 
-      in the system (such as by repeating an import process), do what?
-    "),
-  );
-  
-  $form['advanced']['import_html_handle_no_title'] = array(
-    '#type' => 'select',
-    '#title' => t("No Title"),
-    '#default_value' => variable_get('import_html_handle_no_title', IMPORT_HTML_GUESS),
-    '#options' => array(
-      IMPORT_HTML_GUESS=>'use the document path',
-      IMPORT_HTML_SKIP=>'skip, do not import',
-      IMPORT_HTML_DEFAULT=>'set to a placeholder value'
-    ),
-    '#description' => t("
-      If parsing the input document fails to return any title at all, do what?"
-    ),
-  );
-  
-  $form['advanced']['import_html_other_logic'] = array(
-   '#value' => t("<p>
-       Other logic, like whether to use the TITLE tag or the H1 tag found in a
-       file is defined in the XSL template, which you can tune yourself.
-       </p>"
-   ),
-/*
-  $form['advanced']['import_html_delete_when_done'] = array(
-    '#type' => 'checkbox',
-    '#title' => t("Delete Temp Files when successfully imported"),
-    '#return_value' => TRUE,
-    '#default_value' => variable_get('import_html_delete_when_done', TRUE),
-    '#description' => t("
-        Usually a successful import means it's safe to blow away the
-        interim analyzed page. Turn this OFF for debugging or running repeated
-        passes when tuning an import stylesheet.
-      ")
-    )
-  */
-  );
-  
-  $form['import_html_proceed'] = array(
-   '#value' => '<p>'.l(t("Proceed to import"),"admin/import_html/import_site").'</p>',
-  );
- 
-  return system_settings_form($form);
-}
-
-function import_html_admin_settings_validate($form_id,$form_values) {
-  // Initializing the XSL doc just to check is inefficient, but this is just a config screen.
-  if (!_import_html_get_xsl_doc($form_values['import_html_translation_template']))
-  {
-    form_set_error("import_html_translation_template", "XSL File unable to be parsed");
-  }
-}
-
-
-/**
- * This is a subset of the general settings - these options are also reproduced
- * on later action pages where they can be tweaked closer to the action. So
- * the form is saved in a block of its own.
- */
-
-function import_html_subsettings_form(){
-  $form=array();
-
-    // Taxonomy box:  added by L0rne
-    // note, this doesn't show up for vocabs with only one term. Sorta annoying'
-  if ($taxonomy = module_invoke('taxonomy', 'form_all', 1)) {
-    $taxonomy[0]='none';
-    $form['import_html_import_category'] = array(
-      '#type' => 'select',
-      '#title' => t('Add imported nodes to the following category(s)'),
-      '#default_value' => variable_get('import_html_import_category', ""),
-      '#prefix' => '<div class="criterion">',
-      '#size' => 10,
-      '#suffix' => '</div>',
-      '#options' => $taxonomy,
-      '#multiple' => TRUE,
-    );
-  }
-  
-  // Status selection:  added by L0rne
-  $form['import_html_import_status'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Imported nodes are Published?'),
-    '#default_value' => variable_get('import_html_import_status', TRUE),
-    '#description' => t("
-      Sets the node status.  Check to have nodes published. 
-    "),
-  );
-  
-  // promote selection:  added by L0rne
-  $form['import_html_import_promote'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Imported Nodes are Promoted to front page?'),
-    '#default_value' => variable_get('import_html_import_promote', ""),
-    '#description' => t("
-      Sets whether or not imported nodes are promoted to the front page.
-    "),
-  );
-  
-  global $user;
-  $form['import_html_import_user'] = array(
-    '#type' => 'textfield', 
-    '#title' => t('User to create nodes as'), 
-    '#maxlength' => 60, 
-    '#autocomplete_path' => 'user/autocomplete', 
-    '#default_value' => variable_get('import_html_import_user',$user->name), 
-  );
-
-  if(module_exists('menu')) {
-    $form["import_html_create_menus"] = array(
-      '#type' => 'checkbox',
-      '#title' => t("Add each page to menu"),
-      '#return_value' => TRUE,
-      '#default_value' => variable_get("import_html_create_menus", TRUE),
-      '#description' => t( 'requires menu.module'.(module_exists('menu')?'(installed)':' (Which is NOT available)')),
-    );
-    $options = menu_parent_options(0);
-    $form["import_html_menu_parent_id"] = array(
-      '#type' => 'select',
-      '#title' => t('Menu Parent'),
-      '#default_value' => variable_get("import_html_menu_parent_id", 1 ),
-      '#options' => $options,
-      '#description' => t("
-        Where in the menu system should the new heirachy 
-        of pages be built?
-      "),
-    );
-  }
-  else {
-    $form["import_html_create_menus"] = array(
-      '#type' => 'markup',
-      '#value' => t("
-        Menu is not enabled, so the heirachical structure 
-        of the imported files will NOT be retained.
-      "),
-      '#description' => t("
-        <p>If you enable the menu.module, 
-        the structure of the imported files can be imported as well.</p>
-        <p>Note, that in order for this to work, all the apparent parents
-        of a page must have menu items as well. If importing a subsection, 
-        Placeholders for the higher sections will be created, but they may be 
-        hollow shells.</p>
-      ")
-    );
-  }
-  return $form;
-}  
-
-/**
- * Show an interface to import just one file
- */
-function import_html_demo_form() {
-  $form = array();
-
-  $form = array(
-   '#method' => 'post',
-  );
-  $form['description'] = array(
-     '#value' => t("<p>
-              Enter one HTML URL to process as an import.
-              The retrieved data <em>will not</em> automatically become part of the
-              site unless you confirm it, it's just a demo of what data would be
-              extracted on a simple import.
-            </p>"),
-  );
-
-  $form['Select'] = array(
-    '#type' => 'fieldset',
-    '#title' => t("Select HTML file source"),
-  );
-  $form['Select']['source_url'] = array(
-    '#type' => 'textfield',
-    '#title' => t("URL to import"),
-    '#default_value' => '',
-    '#size' => 80,
-    '#maxlength' => 240,
-    '#description' => t("
-        Local file paths are OK, although you may have to use the
-        <kbd>file://</kbd> syntax on them, depending on your system.
-    "),
-  );
-  $form[] = array(
-    '#type' => 'submit',
-    '#value' => t("Next"),
-  );
-  return $form;
-}
-
-//TODO: fix handler errors
-/**
- * Submit handler for import_html_demo_form
- * @param $form_id
- *   a form_id
- * @param $form_values
- *   posted form values typically passed in by submit handler, but also can be from $_POST.
- *   should contain
- *     ('file_rel_path' array)
- *     relative to the submitted 'source_siteroot' (no trailing slash).
- *     Rel paths here begin with slashes.
- */
-function import_html_demo_form_submit($form_id, $form_values) {
-  switch ($form_id) {
-    case 'import_html_demo_form':
-      // Bulk imports come with context paths which are used for structure
-      // Over-ride (fudge) those inputs for the demo
-      $source_path = foreslash( $form_values['source_url'] );
-
-      $url_parts = parse_url($source_path);
-
-      // divide the path into two halves (avoiding glue_url()
-      $split_at = strpos($source_path, $url_parts['path']);
-  
-      $source_siteroot = substr($source_path, 0, $split_at);
-      $rel_path = substr($source_path, $split_at);
-
-      $import_files = array($rel_path);
-
-      $_POST['op'] = t('Preview'); // Fool the edit page into skipping to step 2
-
-      $files = _import_html_import_files($import_files, $source_siteroot, $form_id, $form_values);
-      $file = array_shift($files);
-      if($file){
-        $node = (object) $file['node'];
-        $output = drupal_get_form('page_node_form', $node);
-        print theme('page', $output);
-      } else {
-        print theme('page', t("For whatever reason, the request to %rel_path on %source_siteroot) failed to return a result. You'll have to enable debugging to find out why.",array('%rel_path' => $rel_path, '%source_siteroot' => $source_siteroot)) );
-      }
-      break;
-      
-    case 'page_node_form':
-      drupal_execute('page_node_form', $form_values);
-      break;
-  }
-}
-
-function import_html_subsettings_submit($form_id,$edit) {
-  // handle incidental settings when submitted from other pages - like during the 
-  // import process.
-  $variables = array(
-  'import_html_siteroot',
-  'import_html_current_subsection',
-  'import_html_import_site_prefix',
-  'import_html_import_category',
-  'import_html_import_status',
-  'import_html_import_promote',
-  'import_html_import_user',
-  'import_html_create_menus',
-  'import_html_menu_parent_id',
-  );
-  foreach($variables as $v){
-   if(isset($edit[$v])){
-    variable_set($v, $edit[$v] );
-   }
   }
   return FALSE;
 }
 
 
-function import_html_settings_summary(){
-  $dest_file_root = url(variable_get('import_html_file_storage_path', 'files/imported/'), NULL, NULL, TRUE);
-  $dest_virtual_path = url(variable_get('import_html_import_site_prefix', 'imported/'), NULL, NULL, TRUE);
-
-  $substitutions = array (
-      '%import_html_siteroot' => variable_get("import_html_siteroot", "[No source defined]") ,
-      '%import_html_current_subsection' => variable_get("import_html_current_subsection", ""),
-      '!dest_virtual_path' => l($dest_virtual_path, $dest_virtual_path ),
-      '!dest_file_root' => l($dest_file_root,$dest_file_root),
-      '!settings_url' => url('admin/import_html/settings'), 
-      '%import_html_default_document' => variable_get("import_html_default_document", "index.htm"),
-      '%import_html_create_menus' => variable_get('import_html_create_menus',TRUE)?'will':'will not',
-      '%import_html_content_type' => variable_get('import_html_content_type','page'),
-      '%import_html_import_site_prefix' => variable_get('import_html_import_site_prefix', 'imported/'),
-      '%import_html_import_status' => variable_get('import_html_import_status',TRUE)?'will':'will not',
-      '%import_html_import_promote' => variable_get('import_html_import_promote',TRUE)?'will':'will not',
-    );
-  
-  $summary = array();
-  $summary[] = t("<p>
-    All page files found under 
-    <br/><code>%import_html_siteroot%import_html_current_subsection</code> 
-    <br/>will be re-created underneath
-    <br/><code>!dest_virtual_path%import_html_current_subsection</code> as <strong>%import_html_content_type</strong> type nodes.",$substitutions);
-    
-  $summary[] = variable_get('import_html_rewrite_links', TRUE) 
-    ? t("Links found within the sources will be rewritten to try and allow for the new paths")
-    : t("Links from within the imported pages will <b>not</b> be rewritten, and may get lost.");
-
-  if (variable_get('import_html_strip_script_tags', FALSE))
-    $summary[] = t("All script tags found in the source will be discarded");
-
-  $summary[] = t("Non-page files imported will be saved beneath <code>!dest_file_root %import_html_current_subsection</code> ", $substitutions);
-
-  $summary[] = t("Default document <code>%import_html_default_document</code> will be used to represent folders.",$substitutions);
-
-  $summary[] = t("New pages %import_html_create_menus be added to the menu.",$substitutions);
-
-  $summary[] = t("Imported pages will %import_html_import_status be published by default and %import_html_import_promote be promoted to the front page.",$substitutions);
-
-  $output = t("<p>These preferences and more are changeable <a href='!settings_url'>in the settings</a>.</p>",$substitutions);
-
-  return theme('box', 'Current Configuration:', theme("item_list",$summary) . $output ); 
-}
 
 /**
- * Implementation of hook_form_alter().
+ * Implementation of hook_form_alter() .
  */
-function import_html_form_alter($form_id, &$form) {
+function import_html_form_alter(&$form, &$form_state, $form_id) {
   // I need to pretend the demo page is a submit page
-  if(($form_id == 'page_node_form') && ($form['#action']==url('admin/import_html/import_files')) ){
+  if (($form_id == 'page_node_form') && ($form['#action'] == url(IMPORT_HTML_ADMIN_PATH .'/import_files')) ) {
     $form['#action'] = url('node/add/page');
   }
 }
 
+////////////////////////////////////////////
+// End of Drupal core hooks.
+// Module utilities below.
 
-function import_html_list_filesystem_callback()
-{
-  // Figure which path we were asked to scan
-  // tidy the inputs.
-  if ($base_path = $_POST['edit']['client_site_root'])
-  {
-    // if this exists, the filename needs to be cut off.
-    if (is_file($base_path))
-    {
-      $base_path = dirname($base_path);
-    }
-  }
-  else
-  {
-    $base_path = $_POST['source_siteroot'];
-  }
-  $base_path = foreslash($base_path);
-  variable_set('import_html_siteroot', $base_path);
-
-  $current_subsection = ensure_trailing_slash($_POST['import_html_current_subsection']);
-  $current_subsection = preg_replace('|^/|', '', $current_subsection);
-  variable_set('import_html_current_subsection', $current_subsection);
-
-  print theme('page', import_html_list_filesystem($base_path, $current_subsection));
-}
 
 
 
 /**
- * Given a local filepath, display all the files I can find in it.
+ * A wrapper to variable_set, variable_get to encapsulate multiple import 'profiles'
  *
- * Exclude hidden files and directories ( starting with "." or "_" ).
- * Guess what type of content they are
- * (html,resources like images and styles or other)
- * based on suffix.
- * Enable handy multi-selections to enhance the form
- * @param  $base_path
+ * This natively just returns the settings from the current 'default' profile,
+ * but also allows the settings forms to be extended to other sets.
+ *
+ * Use INSTEAD OF variable_get() and it will return the 'default' or 'active' profile vars.
+ *
+ * @param $var Name of the variable within the currently active profile to retrieve.
+ * @param $val If set, sets this variable within the profile and saves it.
+ * @see import_html_current_profile();
  */
-function import_html_list_filesystem($base_path, $current_subsection = '')
-{
-  $base_path = ensure_trailing_slash($base_path);
-  debug("Listing contents of $base_path [$current_subsection]", 2);
-  $working_path = $base_path . $current_subsection;
+function import_html_variable($var, $val = NULL) {
 
-  // Meh, list everything and filter them using user prefs  
-  $dir_structure = file_scan_directory(trim_trailing_slash($working_path),".*");
-  debug_pre($dir_structure, 4);
-
-  // file_scan_directory returns a flat array. Convert it into a tree structure, then render it.
-  $tree = import_html_sort_list_into_tree($dir_structure,$base_path);
-
-  $output .= t("<p>
-              %total_count total files found.
-              (Some may be hidden or skipped)
-              </p>", 
-              array ('%total_count' => count($dir_structure))
-  );
-
-  if ($current_subsection)
-  {
-    $output .= t("Listing filtered to display only contents of <b>%current_subsection *</b>",
-      array (
-        '%current_subsection' => $current_subsection
-      )
-    );
+  static $import_html_profiles;
+  if (! $import_html_profiles ) {
+    $import_html_profiles = variable_get('import_html_profiles', array());
   }
 
-  $dest_file_root = url(variable_get('import_html_file_storage_path', 'files/imported/'), NULL, NULL, TRUE);
-  $dest_virtual_path = url(variable_get('import_html_import_site_prefix', 'imported/'), NULL, NULL, TRUE);
+  $import_html_current_profile_id = import_html_current_profile_id();
 
-  debug_pre($tree, 3);
+  if (empty($import_html_profiles[$import_html_current_profile_id])) {
+    // Fill in defaults (should only be needed first time, if that
+    drupal_set_message('import_html_variable initing profile from nowhere - should this ever happen?');
+    $import_html_profiles[$import_html_current_profile_id] = import_html_profile_defaults();
+  }
 
-  // Add cool functions & formatting to the tree view
-  import_html_add_filebrowser_style();
-  import_html_add_filebrowser_js();
+  $import_html_profile = &$import_html_profiles[$import_html_current_profile_id];
 
-  $tree_content .= "<div class='treeContent'>";
-  $tree_content .= "<label for='all_pages' class='page-item'><input type='checkbox' id='all_pages' onclick='select_all_by_type(\"page\",this.checked)' />: All Pages</label>  ";
-  $tree_content .= "<label for='all_images' class='image-item'><input type='checkbox' id='all_images' onclick='select_all_by_type(\"image\",this.checked)' />: All Images</label>  ";
-  $tree_content .= "<label for='all_resources' class='resource-item'><input type='checkbox' id='all_resources' onclick='select_all_by_type(\"resource\",this.checked)' />: All Resources</label>  ";
-  $tree_content .= "<label for='all_other' class='unknown-item'><input type='checkbox' id='all_other' onclick='select_all_by_type(\"unknown\",this.checked)' />: All Other</label>  ";
+  if (isset($val)) {
+    $import_html_profile[$var] = $val;
+    #$import_html_profiles[$import_html_current_profile_id] = $import_html_profile;
+    variable_set('import_html_profiles', $import_html_profiles);
+  }
 
-  $tree_content .= _import_html_format_tree_group($tree, "", "/");
-
-  $tree_content .= "</div>";
-
-  $output .= drupal_get_form('import_html_list_filesystem_form', $tree_content);
-  return $output;
+  return $import_html_profile[$var];
 }
 
 /**
- * From a flat list of file defs, build a tree structure, and annotate it like
- * the forms API does.
- * todo DEPRECATE and include the formtree extension
+ * Accessor for the current profile data
+ *
+ * Returns the data in a named import_html_profile.
+ * The currently active one if not explicitly defined.
+ * Profile will be padded with expected default fields if not explicitly set (to
+ * assist upgrades)
+ *
+ * @param $profile If set, saves this data back to the saved settings. Pass FALSE to delete it.
  */
-function import_html_sort_list_into_tree($dir_structure,$base_path){
-
-  $ex = trim(preg_replace('|\r|',"",variable_get("import_html_file_exclusions","^_\nCVS\n^\\.")));
-  $exclusions = explode("\n",$ex);
-
-  $tree = array ();
-  $count = 0;
-  foreach ($dir_structure as $file_path => $file_info) {
-    $rel_path = substr($file_path, strlen($base_path));
-
-    // skip if it's a hidden/excluded file
-    foreach($exclusions as $regexp){
-      if (preg_match('|'.$regexp.'|', $rel_path)){ continue 2; }
-    }
-
-    $ancestors = preg_split("/[\/\:]+/", $rel_path);
-    $twig = & $tree; // find the current twig, starting from the top
-    $path = '';
-    while ($dad = array_shift($ancestors)) {
-      // walk down the path
-      if (!array_key_exists($dad, $twig)) {
-        // add new branch
-        $twig['#type'] = 'disk_folder';
-        $twig['#value']= $path;
-        $twig['#description']= basename($path);
-        $twig['#filename']   = $base_path.$path; 
-
-        $twig[$dad] = array();
-        $count++;
-      }
-      $path .= $dad.'/';
-      $twig = & $twig[$dad];
-    }
-    $twig['#type']       = 'disk_file';
-    $twig['#description']= $file_info->basename;
-    $twig['#filename']   = $file_path; 
-    $twig['#value']      = $rel_path;
+function import_html_profile($profile_id = NULL, $profile = NULL) {
+  $import_html_profile_id = import_html_current_profile_id($profile_id);
+  static $import_html_profiles;
+  if (! $import_html_profiles ) {
+    $import_html_profiles = variable_get('import_html_profiles', array());
   }
-  return $tree;  
-}
-
-
-function import_html_list_filesystem_form($tree_content) {
-  $form['tree'] = array(
-    '#value' => $tree_content
-  );
-
-  $form['source_siteroot'] = array(
-    '#type' => 'hidden',
-    '#value' => variable_get('import_html_siteroot', "/www/htdocs/"),
-  );
-  
-  $form[] = array(
-    '#type' => 'submit',
-    '#value' => t('Import'),
-  );
-  $form['#method'] = 'post';
-  $form['#action'] = url('admin/import_html/import_files');
-  
-  return $form;
+  if (isset($profile)) {
+    $import_html_profiles[$import_html_profile_id] = $profile;
+    // Allow a quiet delete
+    if (!$profile) {
+      unset($import_html_profiles[$import_html_profile_id]);
+    }
+    variable_set('import_html_profiles', $import_html_profiles);
+  }
+  return @array_merge(import_html_profile_defaults(), $import_html_profiles[$import_html_profile_id]);
 }
 
 
 /**
- * Show an interface to import just one file
+ * Accessor for a persistant profile switcher.
+ *
+ * @param $profile_id If set, this becomes the active profile for the duration of the request.
+ * @returns the current set profile id. 'default' by default.
  */
-function import_html_demo_page() {
-  $output = t("<p>
-              Enter one HTML URL to process as an import.
-              The retrieved data <em>will not</em> automatically become part of the
-              site unless you confirm it, it's just a demo of what data would be
-              extracted on a simple import.
-            </p>");
-
-  $form = array(
-   '#method' => 'post',
-   '#action' => url('admin/import_html/import_files'),
-   );
-
-  $form['Select'] = array(
-    '#type' => 'fieldset',
-    '#title' => t("Select HTML file source"),
-  );
-  $form['Select']['source_url'] = array(
-    '#type' => 'textfield',
-    '#title' => t("URL to import"),
-    '#default_value' => '',
-    '#maxlength' => 240,
-    '#description' => t("
-        Local file paths are OK, although you may have to use the
-        <kbd>file://</kbd> syntax on them, depending on your system.
-        Full URLs should also work if your PHP install supports 
-        <a href='http://nz.php.net/manual/en/features.remote-files.php'>allow_url_fopen</a>
-    "),
-  );
-  $form[] = array(
-    '#type' => 'submit',
-    '#value' => t("Next"),
-  );
-
-  $output .= drupal_get_form('import_html_demo_page', $form);
-  print theme('page', $output);
+function import_html_current_profile_id($profile_id = NULL) {
+  static $import_html_current_profile_id;
+  if (! $import_html_current_profile_id) {
+    $import_html_current_profile_id = variable_get('import_html_current_profile', 'default');
+  }
+  if ($profile_id) {
+    $import_html_current_profile_id = $profile_id;
+  }
+  return $import_html_current_profile_id;
 }
 
-
-
-// The form import_html_list_filesystem_form does not support FAPI completely so the 
-// standard drupal submit handler cannot be used here. instead we use
-// a menu item and callback
 /**
- * A submit handler for import_html_list_filesystem_form.
- *
- * @param $form_id
- *   a form_id
- * @param $form_values
- *   posted form values typically passed in by submit handler, but also can be from $_POST.
- *   should contain
- *     ('file_rel_path' array wrapped in 'edit')
- *     relative to the submitted 'source_siteroot' (no trailing slash).
- *     Rel paths here begin with slashes.
+ * Return an array containing the set of import_html settings to use as a template
  */
-function import_html_import_files_page($form_id = NULL, $form_values = NULL) {
-  // When a real submit handler can be implemented, we should remove the default values
-  if ($form_id == NULL) {
-    $form_id = 'import_html_list_filesystem_form';
-  }
-  if ($form_values == NULL) {
-    $form_values = $_POST;
-  }
-  
-  // We are still on this page when previewing of fixing problems ...
-  // so we may be called upon to handle op 'preview' and 'Submit'.
-  // ... pass them to the normal node edit versions
-  if (($form_values['op'] == t('Preview')) || ($form_values['op'] == t('Submit')))
-  {
-    // TODO: checkme: does this work?
-    return node_page();
-  }
-
-  // Otherwise, do what we are really here for...
-
-  // My fields are handed back wrapped in an 'edit' array. 
-  $import_files = $form_values['edit']['file_rel_path'];
-
-  $source_siteroot = trim_trailing_slash(foreslash($form_values["source_siteroot"]));
-
-  $files = _import_html_import_files($import_files, $source_siteroot, $form_id, $form_values);
-
-  foreach ((array)$files as $file) {
-      if ($file['type'] == 'node') {
-        //
-        // Go ahead and create it now
-        //
-        if ($errors = $file['errors'])
-        {
-          debug('Import did not quite validate', 1);
-          debug_pre($errors, 0);
-          debug_pre($file, 0);
-
-          drupal_set_message(t("Import of '%rel_path' did not quite validate", array (
-            '%rel_path' => $file['rel_path']
-          )));
-          //$output .= node_preview($node);
-
-          // TODO This is not very helpful in bulk mode.
-          $output .= drupal_get_form('page_node_form', $file['node']);
-        }
-        else
-        {
-      	  $node = $file['node'];
-          if ($node->nid)
-          {
-            drupal_set_message(t("Node {$node->nid} Exists, updating it."));
-            node_save($node);
-          }
-          else
-          {
-            drupal_set_message(t("Inserting New Node." . l($node->path, $node->path)));
-            node_submit($node); // Submit doesn't actually save, it just fills in extra fields
-            node_save($node);
-
-            // Had to wait until I had an ID to do this
-            import_html_add_node_navigation($node);
-            // note, navigation only gets set up on first import.
-          }
-          $output .= node_view($node, true);
-        }
-      }
-  }
-  print theme('page', $output);
-}
-
-
-/**
- * Recursive layout function to format a tree-like structure of heirarchical items
- *
- * The categoryPanel has some hoopy CSS applied to it,
- * and a JS library that can enable expanding and contracting tree-like layouts.
- * as well as multiple select support for all members of a directory
- *
- * Yes, maybe these should be LIs or DTs ... not quite sure. Stick with divs for now
- *
- * The function is self-referentially recursive - depth-first formatting of a tree menu.
- *
- * @param $tree array The tree layout so far;
- * @param $name string The human name of the item were are adding right now
- * @param $prefix string The path so far;
- * @param $url string The full address of the item we are adding now
- * @todo reformat this layout into LIs ? or are we safer with lightly formatted divs.
- */
-function _import_html_format_tree_group($tree, $name, $prefix = "", $url = "?") {
-  $path = (($prefix != "/") ? $prefix . "/" : "") . $name;
-  $id = "ID_" . preg_replace("/[^\w]/", "", $path);
-  // $id is a safe name - a unique id derived from the item path
-  // -- OK, these are becoming stupidly long - any reason not to just use a counter?
-
-  // Construct the label
-
-  // Can render different item types differently. Make some guesses from suffix
-  // @TODO should probably try looking at MIME of the content instead of a brain-dead suffix guess
-  $itemType = ($tree['#type'] == 'disk_folder') ? "container" : import_html_guess_file_class($path);
-
-  $labelTag = "\n<label for='${id}_checkbox' id='${id}_label' class='$itemType-item fileLabel' title='$path' >";
-
-  // sorry, form API checkbox does too much layout  for me.
-  // hand-code the inline checkbox myself
-  $box_name = ($tree['#type'] == 'disk_folder') ? "edit[file_rel_dir][]" : "edit[file_rel_path][]"; // don't get dirs mixed up with files
-  $labelTag .= "\n<input type='checkbox' name='$box_name' value='$path' onclick='toggle_tree(\"$id\")' id='${id}_checkbox' />";
-
-
-  $labelTag .= ($name) ? $name : "<big>" . variable_get('import_html_siteroot', "") . "</big>";
-  // special case:  if name is blank (we are at root) show the working dir
-
-  $labelTag .= "</label>";
-
-  // Construct the content
-
-  if (element_children($tree)) {
-   // This node has content to be recursed into
-   ksort($tree);
-    foreach ($tree as $twigname => $twig) {
-      if(element_property($twigname)){continue;}
-      $formatted_twigs .= _import_html_format_tree_group($twig, $twigname, $path);
-    }
-
-    // .expander and .hintbox are hooks for css expandos. Unrelated to checkbox behaviour
-
-    $out .= "
-      <span class='groupItem' id='${id}_container'>
-        <div class='expander' >$labelTag</div>
-        <div class='hintbox' alt='$name' >
-          <div class='groupContent' id='${id}_content' >
-            $formatted_twigs
-          </div>
-        </div>
-        <!-- / .groupItem -->
-      </span>
-    ";
-  }
-  else {
-    $out .= $labelTag;
-  }
-  return $out;
-}
-
-
-
-/**
- * Actually go and get the selected files. Converts the files
- * into nodes and resources and returns an array containing the
- * converted data. Currently resources are automatically
- * saved and not returned with the data. Nodes are not saved
- * and it is the responsibility of the caller to preview or save.
- *
- * Alternatively, this function does double service for the
- * single page demo.
- *
- * The relative paths are used to calculate a traditional url alias
- * for each imported page, so the distinction between base and rel_path is
- * significant.
- * @return
- *   an associative array of files like the following
- *   array ( // of files
- *     array( // each file
- *        'source_path' => $source_path,
- *        'dest_path' => $dest_path,
- *        'type' => 'node' | 'resource',
- *        'node' => $node,
- *        'errors' => form_get_errors(),
- *     ),
- *     ...
- *   )
- */
-function _import_html_import_files($import_files, $source_siteroot) {
-  $dest_root = variable_get('import_html_file_storage_path', 'files/imported/');
-  $output = "";
-  $files = array();
-
-  if(!$import_files){
-    $import_files = $_POST['edit']['file_rel_path'];
-  }
-  
-  if ( ($_POST['op'] == t('Import')) && !$import_files) {
-    drupal_set_message(t("No Files Selected. Nothing to import"), 'error');
-    import_html_list_filesystem_callback();
-    return $files;
-  }
-
-  // The 'rel' paths should include their leading slash -
-  // this indicates they are site-relative - and should come under the siteroot.
-
-  $dest_root = variable_get('import_html_file_storage_path', 'files/imported/');
-	if(empty($dest_root))$dest_root='.';
-
-/*
-  // Bulk imports come with context paths which are used for structure
-  // Over-ride (fudge) those inputs for the demo
-  if (isset ($_POST['edit']['source_url'])) {
-    $source_path = foreslash( $_POST['edit']['source_url'] );
-
-    $path_parts = explode('/',$source_path);
-
-    $rel_path = '/'.array_pop($path_parts);
-    $source_siteroot = join('/', $path_parts);
-
-    $import_files = array ( 0 => $rel_path );
-    debug("Import demo - importing from '".l($source_path,$source_path)."' and calling it '$rel_path' as it it were in '$source_siteroot'" ,1);
-  }
-*/
-
-  $url_parts = parse_url($source_siteroot);
-
-  drupal_set_message(t("Importing " . count($import_files) . " files now"));
-  debug('Importing ' . count($import_files) . " files now", 1);
-  
-  //
-  // Loop starts here
-  //
-  foreach ($import_files as $rel_path)
-  {
-    debug("Importing '$rel_path'", 1);
-    $source_path = $source_siteroot . $rel_path;
-    $save_as = safe_filepath_from_url($rel_path);
-    $dest_path = preg_replace("|/+|", "/", $dest_root . $save_as);
-
-    if (preg_match("|/$|", $rel_path))
-    {
-      // Handle trailing slashes differently at home and away
-      if ($url_parts['host'])
-      { // It's remote
-        $dest_path .= variable_get("import_html_default_document", "index.htm"); // need a dummy filename if retrieveng default docs.
-      }
-      else
-      {
-        continue; //skip local directories altogether (their contents is selected individually)
-      }
-    }
-    
-    $file = array(
-      'source' => $source_path,
-      'dest' => $dest_path,
-      'rel_path' => $rel_path,
-    );
-
-    // handle files that are resources
-    if (import_html_guess_file_class($dest_path) != 'page')
-    {
-      // non-page resource - what sort of processing can I do here?
-      drupal_set_message(t("
-        I think (due to file suffix) that '%source' is not a html page
-        I can process.<br/> It's just been copied into '!dest'.",
-        array (
-          '%source' => basename($source_path),
-          '!dest' => l($dest_path, $dest_path)
-        )
-      ));
-      import_html_get_raw_file_local($source_path, $dest_path, $url_parts['host']);
-      $file['type'] = 'resource';
-      $files[] = $file;
-      continue;
-    }
-
-    // Compare the alias path of this new page with what we've already got
-    $new_path = _import_html_calc_path($rel_path);
-    if (($normal_path = drupal_get_normal_path($new_path)) != $new_path)
-    {
-      //we recognise that alias, thus an item already exists in that path.
-      if (variable_get('import_html_handle_duplicates', IMPORT_HTML_MERGE) == IMPORT_HTML_SKIP)
-      {
-        drupal_set_message("We already have '$new_path' in the system as '$normal_path'. According to import_html settings, this import is being skipped");
-        continue;
-      }
-      drupal_set_message("We already have '$new_path' in the system as '$normal_path'. Overwriting it with the new import");
-    }
-
-    if (!import_html_get_raw_file_local($source_path, $dest_path, $url_parts['host']))
-    {
-      continue;
-    }
-
-    # drupal_set_message(t("processing page '%rel_path'",array('%rel_path'=>$rel_path)));
-
-    //
-    //
-    // $node initialized and processed HERE. Produces a node OBJECT
-    //
-
-    $nodes = _import_html_process_html_page($dest_path, $rel_path);
-    // On rare occasions, (using xt:document) the processing can produce an ARRAY of nodes that need saving
-    // Otherwise it's a node object
-    // Yes this looks like a useless inner loop, but it's to support imports where many nodes may need to be created from a single physical file.
-
-    if(!$nodes){
-      drupal_set_message(t("Failed to process file '%rel_path'",array('%rel_path'=>$rel_path)), "error");
-      continue;
-    }
-
-    // We can immediately discard the source file - 
-    // it should have been a temp copy made by import_html_get_raw_file_local() above
-    if( file_exists($dest_path)){
-      unlink($dest_path);
-    }
-    
-    if(! is_array($nodes)){ // cast into array for iteration anyway.
-      $nodes = array($nodes);
-    } 
-
-    foreach($nodes as $node) {
-      // The node data object has been initialized
-      // It may contain heaps of extra junk set in via a random absorbtion of elements in the XML import.
-      // They will get ignored if not recognised.
-      // Display or save it.
-
-      drupal_set_message(t("Processed page to extract content. Title:'{$node->title}' "));
-
-      // As we are processing/validating multiple nodes on one page, need a form_clear_errors() function;
-      unset ($GLOBALS['form']);
-      $is_valid = TRUE;
-
-      // Avoid double-ups, if the path already exists, UPDATE the existing node.
-      // Can't have two content nodes claiming the same path or it won't validate.
-      $internal_link = drupal_get_normal_path($node->path);
-
-      if ($internal_link != $node->path)
-      {
-        // Found an internal match, the alias is already asigned to a node
-        // Merge info to avoid losing any Drupal-only info
-
-        $node->nid = array_pop(explode("/", $internal_link));
-        if (!$node->nid)
-        {
-          drupal_set_message("
-            When looking for an alias to '{$node->path}', 
-            got error finding node ID from the internal link 
-            '$internal_link' - which was supposed to return a nid", 'error'
-          );
-        }
-        else {
-          debug("
-            Page path alias '{$node->path}' already exists, 
-            It's already linked to node id '{$node->nid}' . 
-            This data import will <em>replace</em> that content, 
-            but try to keep any other values.
-          ",2);
-
-          // Load existing item, layer changes on top of it
-
-          $old_node = node_load($node->nid );
-          foreach ($node as $key => $value) {
-            if(is_array($value)){ // merge deeper sets, like taxonomy
-              if(!is_array($old_node->$key)){$old_node->$key=array();}
-              foreach ($value as $k => $v) {
-                $old_node->{$key}[$k] = $v;
-              }
-            } else {
-              $old_node-> $key = $value;
-            }
-          }
-          $node = $old_node;
-        }
-      } // else node is new
-
-      // If processing in bulk, any error will stop any further processing.
-      // (form_errors is non-null) need to clear it between each pass.
-      unset ($GLOBALS['form']);
-      node_validate($node);
-
-      if (!trim($node->body))
-      {
-        form_set_error('body', t("No body content found in this node"));
-      }
-
-      $file['node'] = $node;
-      $file['errors'] = form_get_errors();
-      $file['type'] = 'node';
-      $files[] = $file;
-    }
-      
-    // end all pages loop.
-  }
-  return $files;
-}
-
-
-/**
- * Carefully fetch a (remote?) file and save it nearby
- */
-function import_html_get_raw_file_local($source_path, $dest_path, $host)
-{
-  mkdirs(dirname($dest_path), FILE_CREATE_DIRECTORY);
-  drupal_set_message(t("Fetching content from %location '<a href='!realpath'>%source_path</a>' now.", array (
-    '%source_path' => $source_path,
-    '%location' => $host,
-    '!realpath' => realpath($source_path),
-  )));
-  debug("Saving temp file locally as '$dest_path' ", 2);
-
-  $orig_path = $source_path;
-
-  if ($host) { 
-    // It's remote
-    if (!remote_file_copy($source_path, $dest_path)) {
-      drupal_set_message(t("Remote file copy failed"));
-      return FALSE;
-    }
-  }
-  else { 
-    // local copy
-    if(realpath($source_path) == realpath($dest_path)){
-    	drupal_set_message("Copying between identical source and destination, $source_path $dest_path , importing file in-place.");
-    	return TRUE;
-    };
-    // drupal file copy assumes everything is under 'files' directory
-    #$dest_path = realpath(dirname($dest_path)).'/'.basename($dest_path);
-
-    if (!copy($source_path, $dest_path)) {
-      drupal_set_message(t('Local file copy failed (%from to %to)',array('%from'=>$orig_path,'%to'=>$dest_path)));
-      drupal_set_message("Source <code>$source_path</code> is <pre>" . print_r(stat($source_path),1))."</pre>";
-      drupal_set_message("Dest folder is <code>$dest_path</code> <pre>" . print_r(stat(dirname($dest_path)),1))."</pre>";
-      
-      return FALSE;
-    }
-  }
-
-  debug("Copied import file from '$orig_path' to '$dest_path'", 2);
-  return TRUE;
-}
-
-
-/**
- * Analyse a source page and create a node definition from it.
- *
- * Most of the processing magic is in here.
- * The $node handle may be provided initialized with some pre-set values.
- * The $node may come in as an array or an object.
- * Internally we should continue using the object methods.
- *
- * This processing is still in the 'validate' phase, so should
- * not cause anything to happen, just configure the node object
- *
- * @param $node An array of data this time. Not an object. Should have all the
- * XML in its body
- * @param $path the file to read the data from. If not defined, the data better be in the $node[body] already.
- * @param $rel_path Where this html page was found, relative to its own server root. This is used to rewrite its urls
- * @return an ARRAY containing the new node object. Some processes may return
- * multiple nodes
- */
-function _import_html_process_html_page($path = "", $rel_path = "")
-{
-  if (!init_xsl()) {
-    trigger_error("Sorry, with no XML support there will be no content scanning AT ALL. Aborting process. See the import_html_help.htm for info on enabling XML under PHP.", E_USER_ERROR);
-    return;
-  }
-
-  if ($path) { 
-    // read from file
-    debug("Processing import page. Full file path: '$path' , relative path under current section: '$rel_path'", 1);
-
-    if(! file_exists($path)){
-      trigger_error("Path '$path' was not found. This should have been a local copy of the file being imported, but the paths may be wrong somehow. Abject failure processing $rel_path"); 
-    }
-
-    /*
-     * Trying to parse pure XML first is causing problems
-     * Either I want everything to be html, (always tidy)
-     * or I allow for exsl:document blocks (which can't be tidied)
-     * Option for now is try to parse, and only tidy if that fails.
-     * 
-     */
-     // temporarily ignore parser errors (catch?)
-    set_error_handler('stfu');
-    $xmldoc = parse_in_xml_file($path, FALSE);
-    restore_error_handler();
-    
-    if(! $xmldoc ){
-      debug("$path was not tidy enough - running tidy over it now so I can parse it.",1);
-      // If a raw XML parse failed,
-      // tell parse_in_xml_file() to use htmlTidy before it begins
-      // TODO - add a flag to skip this double-processing, (parsing twice) it may be a bit slow if it's not often used
-      $xmldoc = parse_in_xml_file($path, TRUE);
-    }
-    
-    debug("<h2>PROCESSING</h2><textarea rows='20' cols='80'>".xml_tostring($xmldoc)."</textarea>",3);
-  }
-  else { 
-    // read from text
-    debug("Processing page source, " . strlen($source_node->body) . " long", 2);
-    $xmldoc = parse_in_xml_string($source_node->body, true);
-  }
-  if (!$xmldoc) { 
-    // parsing failed
-    drupal_set_message(t("Failed to initialize or parse XMLdoc input"), "error");
-    return false;
-  }
-
-  debug("<h2>PARSED XML $path . XHTML</h2><textarea rows='20' cols='80'>" . htmlspecialchars(xml_tostring($xmldoc)) . "</textarea>", 3);
-
-  if(variable_get('import_html_rewrite_links', TRUE)){
-    // use XSL to rewrite links to fit into Drupal
-    $xmldoc = import_html_rewrite_links($xmldoc,$rel_path);
-  }
-  if(variable_get('import_html_strip_tables', FALSE)){
-    $xmldoc = import_html_strip_tables($xmldoc);
-  }
-  
-  // Import content as node.
-  // Translate it to the right format now
-  $parameters = array (
-    'contentid' => variable_get('import_html_content_tag_id', "main" ),
-    'xmlid' => TRUE,
-  );
-
-  if ($xsldoc = _import_html_get_xsl_doc()) {
-    debug("Namespaces are ".$xmldoc->firstChild->nodeName ." : ". $xmldoc->firstChild->namespaceURI." - ".$xsldoc->firstChild->nodeName." : ".$xsldoc->firstChild->namespaceURI."  \n Will search for body content labelled '".$parameters['contentid']."' in the source",1);
-    $importxml = xmldoc_plus_xsldoc($xmldoc, $xsldoc, $parameters);
-    debug("Transform Successful", 2);
-    debug("<h2>TRANSLATED from messy source into a pure xhtml page to import</h2><textarea rows='20' cols='80'>" . $importxml . "</textarea>", 3);
-  }
-  else {
-    trigger_error("Failed to initialize XSLdoc", E_USER_WARNING);
-  }
-
-  if ($importxml) {
-    $xmldoc = parse_in_xml_string($importxml, false);
-    //
-    // Allow one source document to produce multiple nodes
-    // If the process has resulted in xt:document blocks, each block
-    // is a new item.
-    // Either there is a html element in the input ... or many of them.
-
-    $html_elements = xml_getElementsByTagName($xmldoc,'html');
-
-    debug("Found ".count($html_elements)." html elements in source doc",2);
-
-    $nodes = array();
-    // probably only one, but we'll iterate over an array of one then
-    foreach($html_elements as $html_element) {
-      $node = import_html_xhtml_to_node($html_element);
-
-      // Set what we want the alias to be.
-      if(! $node->path) {
-        $node->path = _import_html_calc_path($rel_path);
-        $node->old_path = _import_html_calc_path($rel_path, TRUE);
-      }
-
-      // May need extra care when creating multiples. 
-      // Invent new paths for the new documents if the exsl:document didn't define them
-      if($nodes[$node->path]){
-        // already using this path, extend a new one  
-        $node->path .= '/' . import_html_check_name($node->label?$node->label:$node->title);
-      }
-
-      $node->title = import_html_guess_document_title($node);
-
-      $nodes[$node->path] = $node;
-
-        // added by L0rne  
-        // add publishing options and taxonomy to new node
-
-      $node_status = variable_get('import_html_import_status', "");
-      $node->status = $node_status;
-      
-      $node_promote = variable_get('import_html_import_promote', "");
-      $node->promote = $node_promote;
-  
-      $cat = variable_get('import_html_import_category', "");
-      $node->taxonomy[] = $cat;
-
-      debug("Path to save this page as is '" . $node->path."'", 1);
-    }    
-  }
-  else {
-    trigger_error("Nothing useful extracted via XML from that content", E_USER_WARNING);
-    return false;
-  }
-
-  #debug("<h2>PROCESSED</h2><textarea rows='20' cols='80'>".$node['body']."</textarea>");
-  return $nodes;
-}
-
-
-
-/**
- * From a given XML document, create a node structure
- * with all useful parameters set.
- * A shell node object may be passed in with some values already set. The data
- * extracted from the XHTML structure will be layered onto that.
- * 
- * Here is where we map HTML info to node data, like H1 -> $node->title
- * TODO tidy this up with a lookup table or something
- */
-function import_html_xhtml_to_node($datadoc,$node=NULL){
-  debug("Importing from XML object to node object",3);
-  $node = $node ? $node : new StdClass();
-  $node->type = is_string($node->type) ? $node->type : variable_get('import_html_content_type','page');
-  $node->taxonomy = is_array($node->taxonomy) ? $node->taxonomy : array();
-  
-  // Now read the input into node structure
-  //
-
-  // Totally generic catch-all. 
-  // If the input has any id or classes at all, grab that info
-  // and apply it to this object. assume anything important enough to
-  // have a label is important enough to remember.
-  //
-  // This will probably produce a very cloggy node, filled with trash,
-  // Possibly even some array where there shouldn't be.
-  // But any unrecognised property names
-  // will be discarded on save, but it will allow arbitrary data to 
-  // come and go in the future.
-  // They will come in as plain text, not HTML however.
-  //
-  $microformats = xml_query($datadoc,'.//*[@class]');
-
-  debug("Absorbing all blocks with a class as incidental data blobs (plaintext) into node structure",3);
-  foreach($microformats as $info) {
-    if(empty($info)){continue;}
-    $key = xml_getAttribute($info, 'class');
-    if(trim(xml_textContent($info))){
-      import_html_absorb_properties($node,$key,trim(xml_textContent($info)));
-    }
-  }
-
-  // Look for ids matching the defined CCK fields
-  $cck_fields = array();
-  if(function_exists('content_types')){
-    $content_def=content_types($node->type);
-    $node->body = "PLACEHOLDER. CCK needs no body";
-    if($content_def){
-      debug("This is a CCK node, I'll scan source input for ID-ed bits to import into the CCK fields.",3);
-      // setup a list of field defs to expect
-      foreach($content_def['fields'] as $field_id => $field_def) {
-        $cck_fields[substr($field_id,6)] = $field_def;
-        $cck_fields[$field_id] = $field_def;
-        // allow both long and short id
-      }
-    }
-  }
-
-  debug("Absorbing all blocks with an ID as incidental data blobs (possibly html) into node structure",3);
-  $ids = xml_query($datadoc,'.//*[@id]');
-
-  foreach($ids as $found_element) {
-
-    $key = xml_getAttribute($found_element, 'id');
-    $node->$key = xml_toString($found_element);
-
-    if(isset($cck_fields[$key])){
-      // Yes, this element is cck content.
-      // Retrieve more info about how this field is supposed to be handled
-      debug("found an expected CCK field - '$key' , Absorbing it into the right place",2);
-      $field_def = $cck_fields[$key];
-      if($field_def['text_processing']){
-        $node->{$field_def['field_name']} = array(array(
-          'value'=> xml_toString($found_element,TRUE), 
-          'format' => import_html_get_preferred_filter() 
-        ));
-      } else {
-        // Can only be plaintext, no formatted HTML
-        $node->{$field_def['field_name']} = array(array(
-          'value'=> xml_textContent($found_element), 
-        ));
-      }
-    }
-  }
-
-  //
-  // BODY is the thing with id=content 
-  // 
-  debug("<h2>XML DOM being scanned for XPATH data extraction</h2><textarea rows='20' cols='80'>".print_r(xml_toString($datadoc),1)."</textarea>",3);
-  $content_element = xml_getElementById($datadoc, 'content');  
-
-  if(!$content_element && !$content_def){
-    drupal_set_message("Failed to find a body, anything with id='content' in this page");
-  }
-  if($content_element){
-    $node->body = trim(xml_toString($content_element,TRUE));
-  }
-
-  // It's possible that our input was content-encoded (if it came from RSS or the old import-xml node)
-  // If so, the entities should be unwrapped.
-  // Other (HTML) imports should not require this
-  $node->body = ($node->content_encoded) ? html_entity_decode($node->body):$node->body;
-
-  debug("<h2>Got Body</h2><textarea rows='20' cols='80'>".$node->body."</textarea>",2);
-
-  //
-  // all metas as properties
-  //
-  $head_element = xml_getElementsByTagName($datadoc, 'head', TRUE);
-  // Allow ALL values I find (some may get lost later)
-  import_html_absorb_metas($node, $head_element,'meta','name','content');
-  import_html_absorb_metas($node, $head_element,'link','rel','href');
-
-  // translate links with rel=tag into taxonomy terms
-  $relationships = xml_query($datadoc,'.//*[@rel]');
-  foreach($relationships as $link) {
-    if(empty($link)){continue;}
-    $reltype = xml_getAttribute($link, 'rel');
-    $rellink = xml_getAttribute($link, 'href');
-    $label = xml_textContent($link);
-    if(!empty($label)){
-      if($reltype == 'tag'){
-
-        // Some of this magic should probably shift into absorb_metas()
-        // Still thinking of the best way to encode tags into the raw HTML
-
-        if(strstr($label,":")){
-          // allow an extended format for this value
-          // to support freetext vocab additions
-          // <a rel='tag'>Author:Joe Brown</a> will create a term in the 'Author' vocab called "Joe Brown".
-          debug("Splitting rel link '$label' up to make it a vocab term entry",2);
-          $vocab_term = split(":",$label);
-          $vocab = $vocab_term[0];
-          $label = $vocab_term[1];
-          $voc = taxonomy_get_vocabulary_by_name($vocab);
-          if($voc)
-            $node->taxonomy['tags'][$voc->vid]=$label;
-        }
-
-        $terms = taxonomy_get_term_by_name($label);
-
-        // Allow an optional 'S' on the end of terms when looking for a match.
-        $terms = array_merge($terms,taxonomy_get_term_by_name($label."s"));
-
-        if(!is_array($node->taxonomy)){$node->taxonomy = array();}
-        foreach($terms as $term){
-          $node->taxonomy[$term->tid] = $term;
-        }
-      }
-      import_html_absorb_properties($node, $reltype, $label);
-    }
-  }
-
-
-  // If there are any other things to come from HTML into $node, let me know now!
-
-  // Put the important node properties last - to override any
-  // possible invalid ones.
-  //
-  //  title
-  //  Note, internally the title should always be plaintext, encoded characters and no newlines
-  // a meta 'title' may have been set, 
-  // but I'll use the real visible one by preference.
-  $h1 = xml_get_element_content($datadoc, 'h1');
-  if($h1){
-    $node->title = $h1;
-  } else {
-    $title_elem = xml_get_element_content($datadoc, 'title');
-    if($title_elem){
-      $node->title = $title_elem;
-    }
-  }
-
-  //
-  //  teaser
-  //
-  $teaser = xml_textContent( xml_getElementById($datadoc, 'teaser') ); 
-  $description = xml_textContent( xml_getElementById($datadoc, 'description') );
-  if(!$teaser) $teaser = $description ;
-  // No custom teaser found, but
-  // Imported HTML is highly likely to contain formatting that
-  // will ruin teasers. Do our own cut-down version that assumes 
-  // FILTERED HTML
-  $teaser = filter_filter('process',0,1,node_teaser($node->body));
-  if($teaser) $node->teaser = $teaser;
-
-    
+function import_html_profile_defaults() {
   global $user;
-  $node->uid = $user->uid;
-  $node->name = variable_get('import_html_import_user',$user->name);
-  if ($import_user = user_load(array('name' => $node->name))) {
-    $node->uid = $import_user->uid;
-  }
+  return array(
+    'profile_id' => 'default', // required to be filled in by the system
 
-  // The preferred filter 'format' of this body is none - not even line breaks
-  $node->format = import_html_get_preferred_filter();
+    # extraction prefs
+    'translation_template' => drupal_get_path('module', 'import_html') .'/templates/html2simplehtml.xsl',
+    'content_tag_id' => 'main',
+    'content_type' => 'page',
+    'preferred_filter' => import_html_get_preferred_filter(),
+    'default_document' => 'index.htm',
+    'file_exclusions' => "^_\n/_\nCVS\n^\.\n/\.",
+    'strip_tables' => FALSE,
+    'strip_scripts' => FALSE,
+    'force_tidy' => TRUE,
 
-	debug("After absorbing absolutely everything I could find, the node object now contains the following blocks and bits:",3);
-  debug_pre($node,3);
+    #replication options
+    'trim_suffixes' => TRUE,
+    'legacy_aliases' => TRUE,
+    'relink_files' => FALSE,
+    'allow_bad_urls' => FALSE,
+    'file_storage_path' => file_directory_path() ."/imported/",
+    'rewrite_links' => TRUE,
+    'import_site_prefix' => '',
+    'freetag_vocab' => 0,
 
+    #subsettings
+    'import_category' => array(),
+    'import_status' => TRUE,
+    'import_promote' => "",
+    'import_user' => $user->name,
+    'create_menus' => TRUE,
+    'menu_parent_id' => 'primary-links:0',
 
-  return $node;
-}
+    #advanced
+    'handle_duplicates' => IMPORT_HTML_MERGE,
+    'handle_no_title' => IMPORT_HTML_GUESS,
+    'recursion_behaviour' => IMPORT_HTML_GLOB_BEFORE,
+    'debug_level' => 0,
+    'keep_temp_files' => FALSE,
 
-
-
-function import_html_absorb_metas(&$node, $xml_element, $tagname, $keyname, $valname){
-  $metas = xml_getElementsByTagName($xml_element, $tagname);
-  debug("Absorbing the '$valname' of '{$tagname}'s with a '$keyname' from source doc into node structure",3);
-  foreach($metas as $meta) {
-    if(empty($meta)){continue;}
-    $key = xml_getAttribute($meta, $keyname);
-    $value = xml_getAttribute($meta, $valname);
-    if($key && $value){
-      import_html_absorb_properties($node,$key,$value);
-      if(module_exists('nodewords')){
-        $node->nodewords[strtolower($key)] = $value;
-      }
-    }
-    else{
-      debug("Absorbing '$valname' from '{$tagname}'s with a '$keyname' from source doc ($key=$value) had a null value",1);
-    }
-    
-  }
-}
-
-/**
- * Set the given property on the given object,
- * allowing multiple values to expand into arrays.
- *
- * to help CCK imports, if the key begins with 'field_' - ALWAYS cast into an array
- * as that's what CCK expects
- */
-function import_html_absorb_properties(&$node,$key,$value){
-  if(!$key){debug("Odd, when absorbing properties, '$value' is a value for where?");return;}
-  if(!$value){debug("Odd, when absorbing properties, '$key' had a null value.",1);return;}
-	
-	if(substr($key,0,6)=='field_'){
-	  //is cck
-	  $node->$key = array(array('value'=>$value));
-	  return;
-  }
-  
-	// auto-expand into arrays - most metas can legally have duplicates
-	if( ! isset($node->$key) ){
-    $node->$key = $value;
-  }
-	else if( is_array($node->$key) ) {
-		$a = $node->$key; $a[] = $value; $node->$key = $a; 
-	}
-	else { $node->$key = array($node->$key,$value); }
-}
-
-
-
-/**
- * Set alias and navigation for the given node
- * Helper for _import_html_import_files()
- */
-function import_html_add_node_navigation(& $node)
-{
-//dsm($node);
-  if (module_exists('path') && variable_get("import_html_legacy_aliases", TRUE) && ($node->old_path != $node->path))
-  {
-    debug("Setting up navigation links for this item now. Directing ".$node->old_path." to go to the system path ".drupal_get_normal_path($node->path), 2);
-
-    // Caching is confusing me here. Instead:
-    // $normal_path = drupal_get_normal_path($node->path);
-    $normal_path = 'node/'.$node->nid;
-    
-    if($normal_path == $node->path){
-      drupal_set_message(t("Failed to resolve ".$node->path." into a system path. Cannot create alias at this time."));
-    } else {
-      path_set_alias($normal_path, $node->old_path);
-  
-      drupal_set_message(t("This document (known internally as '%normal_path' ) should now be accessible via aliases as both '!main_alias' and '!legacy_alias' ",
-        array(
-          '%normal_path' => $normal_path,
-          '!main_alias' => l($node->path, $node->path),
-          '!legacy_alias' => l($node->old_path, $node->old_path)
-        )
-      ));
-    }
-  }
-
-  // Create Menu item for this new item
-  if (variable_get("import_html_create_menus", TRUE))
-  {
-    $node->label = $node->title;
-    // Need to beware of stupid long titles - they can't fit in breadcrumbs and menus
-    if(strlen($node->title) > IMPORT_HTML_MAX_LABEL_LENGTH){
-      $path_bits = split('/',$node->path);
-      $node->label=array_pop($path_bits);
-      $node->label=str_replace('_',' ',$node->label);
-      // @TODO maybe adjust this title-munging algoritm to make better guesses
-      drupal_set_message("The title '$node->title' is too long to fit into a menu label (MAX=".IMPORT_HTML_MAX_LABEL_LENGTH." chars), truncating it to '$node->label' . You may want to fix this later.","error");
-    }
-    $node->menu['title'] = $node->label;
-    $node->menu['pid'] = import_html_create_menu_path($node->path, $node->label);
-    $node->menu['type'] |= MENU_CREATED_BY_ADMIN | MENU_MODIFIABLE_BY_ADMIN | MENU_VISIBLE_IN_TREE | MENU_VISIBLE_IN_BREADCRUMB;
-    $node->menu['path'] = $normal_path;
-    menu_edit_item_save($node->menu);
-  }
-}
-
-
-/**
- * Just to save repetition
- */
-if(extension_loaded("xsl")) {
-  // PHP5
-   
-  function get_element_content($XMLDoc, $tagname)
-  {
-    $tags = $XMLDoc->getElementsByTagName($tagname);
-    if ($tag = $tags->item(0))
-    {
-      return $tag->textContent ;
-    }
-    else
-    {
-      debug("No $tagname tag in parsed data");
-    }
-  }
-} else {
-   // PHP4
-  function get_element_content($XMLDoc, $tagname)
-  {
-    $tags = $XMLDoc->get_elements_by_tagname($tagname);
-    if ($tags[0])
-    {
-      return $tags[0]->get_content();
-    }
-    else
-    {
-      debug("No $tagname tag in parsed data");
-    }
-  }
-  
-}
-
-/**
- * Return a menu item matching a given path or alias.
- * 
- * Menu_get_item re-writes the path from alias to 'normal' path when it
- * initializes. This makes it impossible to retrieve menu items by name.
- */
-function menu_get_item_by_path($path){
-  $result = db_query('SELECT * FROM {menu} WHERE path="%s"', $path);
-  return db_fetch_array($result);
-}
-
-function taxonomy_get_vocabulary_by_name($name){
-  $vs = taxonomy_get_vocabularies();
-  foreach($vs as $voc){
-    if($voc->name == $name) return $voc;
-  }
-}
-
-function import_html_guess_document_title($node){
-
-    if (! $node->title ) {
-      switch (variable_get('import_html_handle_no_title', IMPORT_HTML_GUESS)) {
-        case IMPORT_HTML_GUESS :
-          return import_html_guess_label($node->path);
-          break;
-        case IMPORT_HTML_DEFAULT :
-          return 'Untitled Document';
-          break;
-      }
-    }
-  return $node->title;
-}
-
-function import_html_guess_label($title){
-  $path_bits = split('/',$title);
-  $title=array_pop($path_bits);
-  if(!$title){$title=array_pop($path_bits);} // it had a trailing slash
-  $title = str_replace('_',' ',$title);
-  $title = (strstr($title,'.')) ? substr($title, 0, strrpos($title, ".")) : $title;
-  return $title;  
-}
-
-
-/**
- * Return the nice path alias of an imported page
- */
-function _import_html_calc_path($rel_path, $leave_suffix = FALSE)
-{
-  $path = variable_get('import_html_import_site_prefix', 'imported/') . preg_replace('|^/|', '', $rel_path);
-  $path = preg_replace('| |', '%20', $path); // URLs should NOT have spaces, but old sites may have done this
-
-  if ($leave_suffix) {
-    return $path;
-  }
-
-  if (variable_get('import_html_trim_suffixes', TRUE)) {
-    // Simplify the URL if possible by trimming the suffix and 'index'
-    // but remember the original path somewhere, we'ill need to link it forward
-    // once the new node is established. see import_html_add_node_navigation()
-
-    // to be clever, special-case the 'index.html' files to be
-    // linked to their parent directories.
-    // Trailing slash is tricky.
-    // /this/path is a whole navigation level above
-    // /this/path/ and will resolve relative links differently! 
-    // We need to actually redirect, not just alias any links like that
-    $preg = '|/(' . variable_get("import_html_default_document", "index.htm") . ')$|';
-    if (($path = preg_replace($preg, "", $path)) == $path)
-    {
-      // No change, Chop suffix instead
-      $path = preg_replace('|\.[^\.].+$|', "", $path);
-    }
-  }
-  return $path;
-}
-
-/**
- * Find and initialize the transformation template. Caching retrieval
- */
-function _import_html_get_xsl_doc($xslfile="")
-{
-  static $xsldoc;
-  if ($xsldoc)
-  {
-    return $xsldoc;
-  }
-  if(empty($xslfile)) {
-    $xslfile = variable_get("import_html_translation_template", "html2simplehtml.xsl");
-  }
-
-  // check if and where filepath can be found
-  // Search first under module dir, then under files dir
-  if (!$xslfilepath = drupal_get_path('module', 'import_html') . "/$xslfile")
-  {
-    $xslfilepath = drupal_get_path('file', "/$xslfile");
-  }
-
-  if (file_exists($xslfilepath))
-  {
-    debug("Loading Transformation Stylesheet from $xslfilepath", 2);
-    $xsldoc = parse_in_xml_file($xslfilepath, false);
-  }
-  else
-  {
-    drupal_set_message("Unable to locate the Transformation Stylesheet '$xslfile' ", "error");
-    return false;
-  }
-  return $xsldoc;
-}
-
-/**
- * Run the url-rewrite XSL over the source document
- * TODO allow for the non-base version of Drupal links
- * 
- * In 4.6, the href_base was just given (relative to root).
- * in 4.7 with no base, it's un-needed. 
- * The resource-path however needs to be
- * converted into path-to- top and back down again.
- * 
- * @return an XML doc again
- */
-function import_html_rewrite_links($xmldoc,$rel_path){
-  static $rewrite_xsldoc; // memo this to speed up bulk imports
-  static $xslfilepath;
-  if (!$rewrite_xsldoc) {
-    $xslfilepath = drupal_get_path('module', 'import_html') . "/rewrite_href_and_src.xsl";
-    $rewrite_xsldoc = parse_in_xml_file($xslfilepath, false);
-  }
-
-  debug("Rewriting links for a file called '$rel_path' . dirname($rel_path) is ".dirname($rel_path),2);
-  // That is dirname('/ok.htm') returns '\'; No idea why, may only happen at root level on Win
-  // !! B-X
-
-  $rel_base = foreslash(preg_replace("|^/|", "", dirname($rel_path) . "/"));
-
-  // I want a trailing slash, but not a leading one for te next concatenation
-  $rel_base = ensure_trailing_slash(trim(foreslash(dirname($rel_path)), '/'));
-
-  $href_base = variable_get('import_html_import_site_prefix', 'imported/') . $rel_base;
-
-  // 4.7.
-  // How to get thayer from heeyar
-  $path_to_import_top = preg_replace("|[^/]*/|","../",$rel_base);
-  $path_to_site_top = preg_replace("|[^/]*/|","../",$href_base);
-
-  // if we are re-writing thing/index.htm to thing - our links will resolve differently!
-  // either too high for thing, or too low for the thing/index.htm alias.
-
-  // up and over a long way
-  $src_base = $path_to_site_top . variable_get('import_html_file_storage_path', 'files/imported/' ) . $rel_base;
-  // or give up and go (it works, but is not good for drupal subsites).
-  // $src_base = url( variable_get('import_html_file_storage_path', 'files/imported/' ) . $rel_base );
-
-  $href_base = '';
-
-  debug("
-  Path to top of the new section 
-  (".variable_get('import_html_import_site_prefix', 'imported/').")
-  from here ($rel_path)
-  to our import base 
-  (".variable_get('import_html_import_site_prefix', 'imported/').")
-  would be '$path_to_import_top'
-  or to find the base for relative sources files over in
-  (".variable_get('import_html_file_storage_path', 'files/imported/' ).")
-  would be '$src_base' ",2);
-  
-  
-  $parameters = array (
-    // These parameters tell the rewriter what to prepend to the links.
-    // They are instructions how this page will find its missing bretheren
-    // when we put it where we put it.
-    // Images and Pages may end up in different places.
-    'src_base'       => $src_base, 
-    'href_base'      => $href_base,
-    'replace_suffix' => variable_get('import_html_relink_files', FALSE), 
-    'new_suffix'     => '',
-    'xsl_path'       => $xslfilepath,
-    'strip_script_tags' => variable_get('import_html_strip_script_tags', FALSE), 
   );
-  debug("
-    XSL for URL rewrites loaded OK. 
-    HTML links for files that were under '$rel_base' will be made relative to '" 
-    . $parameters['href_base'] . "' and '" . $parameters['src_base'] ."'" 
-    . ( $parameters['strip_script_tags'] ? 'All inline script blocks will be discarded from the source.'.$parameters['strip_script_tags'] : '')
-    , 2);
-  debug("<h2>PARSED XSL $xslfilepath . XSL</h2><textarea rows='20' cols='80'>" . xml_tostring($rewrite_xsldoc) . "</textarea>", 3);
-
-  $rewritten = xmldoc_plus_xsldoc($xmldoc, $rewrite_xsldoc, $parameters);
-
-  // collapse dir-up "../" paths. To tricky for XSL. Hope it doesn't break anything
-  $rewritten = preg_replace('|/[^\.][^/\s"\'>]*/\.\./|','/',$rewritten);
-
-  debug("<h2>The source after URL rewriting . XHTML (string)</h2><textarea rows='20' cols='80'>" . $rewritten . "</textarea>", 2);
-
-  $xmldoc = parse_in_xml_string($rewritten, false);
-  if (!$xmldoc) {
-    trigger_error("Failed to rewrite links into a valid XML file", E_USER_WARNING);
-    return false;
-  }
-
-  debug("<h2>Parsed in again. XHTML (XML)</h2><textarea rows='20' cols='80'>" . xml_tostring($xmldoc) . "</textarea>", 3);
-  return $xmldoc;
-}
-
-/**
- * Run the strip_tables XSL over the source document
- * 
- * 
- * @return an XML doc again
- */
-function import_html_strip_tables($xmldoc){
-  static $strip_tables_xsldoc; // memo this to speed up bulk imports
-  if (!$strip_tables_xsldoc) {
-    $xslfilepath = drupal_get_path('module', 'import_html') . "/strip_tables.xsl";
-    $strip_tables_xsldoc = parse_in_xml_file($xslfilepath, false);
-  }
-
-  debug("<h2>PARSED strip_tables XSL $xslfilepath . XSL</h2><textarea rows='20' cols='80'>" . xml_tostring($strip_tables_xsldoc) . "</textarea>", 3);
-
-  $parameters = array();
-  $rewritten = xmldoc_plus_xsldoc($xmldoc, $strip_tables_xsldoc, $parameters);
-
-  // normalize space to clean up the gaps
-  $rewritten = preg_replace("/\\s*\\n\\s*/","\n",$rewritten);
-
-  debug("<h2>The source after stripping tables . XHTML (string)</h2><textarea rows='20' cols='80'>" . $rewritten . "</textarea>", 2);
-
-  $xmldoc = parse_in_xml_string($rewritten, false);
-  if (!$xmldoc) {
-    trigger_error("Failed to strip tables and end up with a valid XML file", E_USER_WARNING);
-    return false;
-  }
-
-  return $xmldoc;
-}
-
-/**
- * Returns what general 'type' a file probably is, based on suffix
- * @returns one of the defined 'file_classes' : page|image|resource|document ... or null if unknown
- */
-function import_html_guess_file_class($filename)
-{
-  global $import_html_file_classes;
-  if (count(explode('.', $filename)) == 1)
-  {
-    return 'page';
-  } // assume no suffix at all is a page
-  return $import_html_file_classes[strtolower(array_pop(explode('.', $filename)))];
-}
-
-/**
- * Given a traditional URL path, return the parent menu item
- *
- * A helper function to Menu OTF
- * This is a recursive function that slices the given
- * path up until it finds a menu item it recognises.
- * Once found, it comes back down again building a path
- * until we end up with the new parent menu id.
- *
- * @param $path the path we intend to construct
- * @param $title optional Display title of the menu item at that path point, otherwist it'll use the last fragment of the path as a display title
- * @return a menu id
- * */
-function import_html_create_menu_path($path, $title = '')
-{
-  debug("Looking for a menu item matching path '$path' ", 2);
-  if ((!module_exists('menu')) || (!module_exists('path')))
-  {
-    return;
-  }
-
-  // check parent exists
-  if ($pid = menu_get_by_path($path))
-  {
-    return $pid;
-  }
-
-  $p_path = dirname($path); // parent path
-
-  if ($p_path == dirname($p_path))
-  {
-    debug("
-        Looping menu path, this is either a recursion error (illegal paths),
-        or caused by creating a new menu tree from the bottom up and we just
-        reached the top.
-        Although a menu structure for this page is now built, it may be hard
-        to navigate to child pages if the parent doesnt exist.
-        This can be fixed by importing the parents or creating section header content.
-    ", 1);
-    return variable_get('import_html_menu_parent_id', 1);
-    // unsure why this happens, dirname goes loopy at the top
-    //$pid = 1; $p_path = $path;
-  }
-
-  if (!$pid = menu_get_by_path($p_path))
-  {
-    // Parent not found,
-    // Need to make it up...
-    $pid = import_html_create_menu_path($p_path);
-    // That will have climbed up and come back down. with its nearest new ancestor
-  }
-  // and attach self to it
-
-  if ($pid)
-  {
-    if (!$title)
-    {
-      $title = basename($path);
-      if (strstr(".", $title))
-      {
-        $title = substr($title, 0, strrpos($title, "."));
-      }
-    }
-    $new = array (
-      'title' => $title,
-      'path' => $path,
-      'pid' => $pid,
-      'type' => MENU_CUSTOM_ITEM
-    );
-    debug("Defining new menu item '$path' as a child of $pid", 2);
-
-    if (!form_get_errors() && (!menu_get_by_path($path)))
-    {
-      menu_edit_item_save($new);
-    }
-    else
-    {
-      debug_pre(form_get_errors());
-      debug_pre(menu_get_menu(), 4);
-      return;
-    }
-    $mid = menu_get_by_path($path);
-    // need to clear the menu cache for the new item to show up
-    menu_rebuild();
-
-    debug("New Menu Item '" . $new['title'] . "' id is :" . $mid, 2);
-    return $mid;
-  }
-  else
-  {
-    debug("Failed to regressively build menu for '$path'");
-  }
-}
-
-
-/**
- * Ensure a sting is able to be used as an XML, CSS or Javascript ID.
- * Basically strip out all non-alpha-numerics
- * http://www.w3.org/TR/REC-xml/#NT-Name
- * @see form_clean_id() - which should have done this
- */
-function import_html_check_name($name) {
-  return preg_replace('|[^a-zA-Z0-9_]+|','_',$name);
-}
-
-/**
- * @return a menu ID
- */
-function menu_get_by_path($path)
-{
-  $menu = menu_get_menu();
-  if ($mid = $menu['path index'][$path])
-  {
-    return $mid;
-  }
-  // it's bad mojo to mess with the DB directly, but menu doesn't provide a lookup API.
-  // Or a way to avoid caching. Do it by hand if I need a newly added menu
-  $row = db_fetch_object(db_query('SELECT * FROM {menu} WHERE path = "%s"', $path));
-  if ($row)
-  {
-    return $row->mid;
-  }
 }
 
 /**
@@ -2531,11 +422,11 @@ function menu_get_by_path($path)
  *
  * @param $as_list bool set this to just get an option list of available filters
  */
-function import_html_get_preferred_filter($as_list = FALSE)
-{
+function import_html_get_preferred_filter($as_list = FALSE) {
+  static $fid;
+  if ($fid) return $fid;
 
-  if (($preferred_filter = variable_get('import_html_preferred_filter', 0)) && (!$as_list))
-  {
+  if (($preferred_filter = variable_get('import_html_preferred_filter', 0)) && (!$as_list)) {
     return $preferred_filter;
   }
   // As we are importing existing html, we don't even need line breaks done for us,
@@ -2544,215 +435,248 @@ function import_html_get_preferred_filter($as_list = FALSE)
   // Detect the ID of 'Unfiltered HTML' format, if available
   // it's almost always 3, but I guess we must look it up.
   $ff = filter_formats();
-  $formats = array ();
-  foreach ($ff as $f)
-  {
+
+  $formats = array();
+  foreach ($ff as $f) {
     $formats[$f->format] = $f->name;
-    if ($f->name == 'Unfiltered HTML')
-    {
+    if ($f->name == 'Unfiltered HTML') {
       $fid = $f->format;
     }
   }
 
-  if ($as_list)
-  {
+  if ($as_list) {
     return $formats;
   }
 
-  if (!$fid)
-  {
+  if (!$fid) {
     // No unfiltered HTML option available... but I need it!;
     drupal_set_message("Creating new filter option - Unfiltered HTML");
 
     // can't use filter_admin_add(); as it rewrites the whole page
     // sorry, direct SQL
     db_query("INSERT INTO {filter_formats} (name) VALUES ('%s')", 'Unfiltered HTML');
-    $fid = db_result(db_query("SELECT format from {filter_formats} where name='$s'", 'Unfiltered HTML'));
+    $fid = db_result(db_query("SELECT format from {filter_formats} where name='%s'", 'Unfiltered HTML'));
   }
   variable_set('import_html_preferred_filter', $fid);
   return $fid;
 }
 
 
-
 /**
- * Tidy URLs before saving locally - for URL imports
- * 
- * Squash/hash query strings, but don't discard them.
- * 
- * Replace spaces and non-alphanumerics with underscore
- */
-function safe_filepath_from_url($rel_path) {
-  $save_as = preg_replace("|\?|", "/", $rel_path);
-  $save_as = preg_replace("|#.*|", "", $save_as);
-
-  if(variable_get('import_html_allow_bad_urls', FALSE))
-    return $save_as;
-  
-  $save_as = preg_replace("|[^A-Za-z0-9_\-~\./]+|", "_", $save_as);
-  return $save_as;
-}
-
-/**
- * dummy error handler
- * Used to shush DOM errors when we know the doc is probably invalid
- */
-function stfu($err,$str){
-  debug($str,4);
-};
-
-/**
- * Inserts some css into the head for rendering the filebrowser
- */
-function import_html_add_filebrowser_style()
-{
-  drupal_set_html_head("
-            <style>
-            .treeContent{background:white;}
-            .groupItem{border:1px solid cyan; margin-right:2px; margin-bottom:2px; display:block;}
-            .fileLabel{ display:block;}
-            .fileSelectedLabel{ display:block; background:pink; font-weight:bold}
-            .groupContent{padding-left:1em; display:block;}
-            label.page-item{color:#000099;}
-            label.image-item{color:#009900;}
-            label.resource-item{color:#990000;}
-            label.container-item{font-weight:bold;}
-            label.unknown-item{color:#999999;}
-            </style>
-          ");
-}
-
-/**
- * Include Javascript library to enhance the filebrowser.
+ * Returns what general 'type' a file probably is, based on suffix or mime if
+ * available.
  *
- * Enable Multiple selects by category
+ * @returns one of the defined 'file_classes' : page|image|resource|document ... or null if unknown
+ *
+ * This is mainly used for UI coloring, so is not totally cannonic. HTML-or-not
+ * is all that really counts.
+ *
+ * @see $_import_html_file_classes
  */
-function import_html_add_filebrowser_js()
-{
-  drupal_set_html_head("
-            <script>
-            <!-- // <[CDATA[
-        
-        // Declare two big lookups globally to avoid doing them too often
-        
-        var all_inputs = document.getElementsByTagName('input');
-        var all_labels = document.getElementsByTagName('label');
-        
-            /*
-             * Toggle a checkbox, and all its children if it's a container
-             * If the checkbox represents a container of a other boxes
-             * (its value (a path) is a 'parent' of their path)
-             * the children are toggled too
-             */
-            function toggle_tree(id,on) {
-              if (checkbox_node = document.getElementById(id+'_checkbox'))
-              {
-                var turn_on = checkbox_node.checked; // dhtml/moz
-                // On or off? Either use the state of the trigger element, or the optional override value
-                if (typeof(on)!='undefined')turn_on=(on)?1:0;
-        
-        
-                var checkbox_label = document.getElementById(id+'_label');
-                if (checkbox_label){
-                  label_class = checkbox_label.getAttribute('className');
-                  if(! label_class){ label_class = checkbox_label.className; }
-                } else {
-                  return;
-                }
-        
-                if (label_class.match('container')) {
-                  // go through all inputs, work just on children (ones with values that include the current id)
-        
-                  for (var c = 0; c < all_labels.length; c++)
-                  {
-                    var input_node = all_inputs[c];
-                    var input_node_id = input_node.getAttribute('id');
-        
-                    if (
-                      ( input_node.getAttribute('type') == 'checkbox' ) &&
-                      ( input_node_id.search(id) == 0) // child path contains parent path           (match (id, input_node.getAttribute('id') ) )
-                    ) {
-                      // it looks like a child of the trigger id . Set it.
-        
-                      // alert('turning '+input_node_id+' '+turn_on)
-                        toggle_checkbox_visually(input_node,turn_on);
-        
-                    } // not a child
-                  } // end loop all inputs
-                } // else not a container
-        
-                toggle_checkbox_visually(checkbox_node,turn_on);
-        
-              } // else alert('couldnt locate node :'+id+' to toggle');
-            }
-        
-            /*
-             * As well as just toggling the checkbox, toggle the css class of this boxes label
-             * For great brightness!
-             */
-            function toggle_checkbox_visually(checkbox,turn_on) {
-        
-              checkbox.setAttribute('checked',turn_on); // dom/ie
-              checkbox.checked = turn_on; // dhtml/moz
-        
-              var checkbox_id = checkbox.getAttribute('id');
-              var child_id = checkbox_id.substring(0,checkbox_id.length-9);
-        
-              // highlight the label of this item
-              if (label_node = document.getElementById(child_id+'_label')) {
-                var current_class=label_node.getAttribute('className');
-                if(! current_class){ current_class = label_node.className; }
-                // SWITCH, don't _set_ class, to allow for multiple class names
-                // unfortunately this may slow down the scanning a tad
-                if (turn_on) {
-                  label_node.setAttribute('className',current_class.replace('fileLabel','fileSelectedLabel'));
-                } else {
-                  label_node.setAttribute('className',current_class.replace('fileSelectedLabel','fileLabel'));
-                }
-              } // else alert('couldnt locate '+child_id+'_label'+' label' );
-            }
-        
-        
-            /*
-             * Toggle all checkboxes whose label is a certain class
-             * This can get a bit slow, so anything that can be done to speed it up would be good
-             */
-            function select_all_by_type(type,on) {
-              // yay XML
-              // all_inputs = document.selectNodes(\"//*[*/@class='\"+type+\"']\");
-              // Boo didn't work
-        
-              window.status = all_labels.length +' checkboxes to check. (This can take a few seconds if there are hundreds) ';
-              var toggled = 0;
-        
-              var d = new Date();
-              var t = d.getTime();
-              for (var c = 0; c < all_labels.length; c++)
-              {
-                var input_node = all_labels[c];
-                var input_node_class = input_node.getAttribute('className');
-                if(! input_node_class){ input_node_class = input_node.className; }
-        
-                if (input_node_class.match(type)) { // multi-class labels make it tricky, but this is no slower than a direct comparison, I benchmarked!
-        
-                  var input_node_id = input_node.getAttribute('id');
-                  if(!input_node_id){continue;}
-                  var child_id = input_node_id.substring(0,input_node_id.length-6);
-                  if (child_id) {
-                    if (checkbox_node = document.getElementById(child_id+'_checkbox'))
-                    {
-                      toggle_checkbox_visually(checkbox_node,on);
-                      toggled ++;
-                      // window.status = 'toggling #'+toggled+' '+on ;
-                    }
-                  }
-                }
-              }
-              d = new Date();
-              window.status = '' + toggled + ' checkboxes out of ' + all_labels.length + ' toggled in '+ (d.getTime()-t)+' ms' ;
-        
-            }
-            // ]]> -->
-            </script>
-          ");
+function import_html_guess_file_class($filename) {
+  global $_import_html_file_classes;
+
+  // First try mime
+  if ( function_exists ('mime_content_type') ) {
+    $mime = mime_content_type($filename);
+    list($mime_type, $mime_subtype) = split('/', $mime);
+    if ($mime == 'text/html') return $mime_subtype;
+    if ($mime_type == 'image') return $mime_type;
+    if ($mime == 'text/css') return 'resource';
+    if ($mime == 'application/x-shockwave-flash') return 'resource';
+    if ($mime == 'application/x-javascript') return 'resource';
+    if ($mime_type == 'application') return 'document'; // gross generalization
+    # return 'resource';
+  }
+
+  // Some file mirrors (wget or myself) may have produced odd filenames
+  // strip URL args like # and ? off it
+  $filename = preg_replace('|[\?\#].*$|', '', $filename);
+
+  if (count(explode('.', basename($filename))) == 1) {
+    // assume no suffix at all is a html page
+    return 'html';
+  }
+  $extension = pathinfo($filename, PATHINFO_EXTENSION);
+
+  return @$_import_html_file_classes[strtolower($extension)];
+}
+
+/**
+ * Declare themable stuff.
+ */
+function import_html_theme() {
+  return array(
+    'import_html_list_filesystem_tree' => array(
+      'arguments' => array('form' => NULL)
+    ),
+    'tree_branch' => array(
+      'arguments' => array('element' => NULL)
+    ),
+    'import_html_filesystem_tree_item' => array(
+      'arguments' => array('element' => NULL)
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_elements().
+ *
+ * Declare our custom pseudo for item
+ */
+function import_html_elements() {
+  $type['tree_branch'] = array(
+    '#theme' => 'tree_branch',
+  );
+  return $type;
+}
+
+
+
+///////////////////////////////////////////////////////
+// Batch operations are really part of import_html_process, but
+// need to be in this module file so the batch runner can FIND the jobs
+// Batch ops do not allow inc file inclusions AFAIK.
+
+/**
+ * Return a batch set containing the instructions to run over many files.
+ *
+ * A batch set is a queue consisting of multiple batch jobs.
+ *
+ * @see import_html_import_file_batch_job()
+ *
+ * @param $file_list
+ * @param $profile context settings.
+ */
+function import_html_import_files_batch_instructions($file_list, $context, $funcname = 'import_html_import_file_batch_job') {
+  // Prepare a batch config
+  $batch_settings = array(
+    'finished'         => 'import_html_batch_import_finished',
+    'title'            => t('Processing all queued import requests. %count tasks.', array('%count' => count($file_list))),
+    'init_message'     => t('Starting Batch HTML Import.'),
+    'progress_message' => t('Processed @current out of @total.', array()),
+    'error_message'    => t('Batch HTML Import has encountered an error.'),
+    'operations'       => array(),
+  );
+  asort($file_list);
+  foreach ($file_list as $rel_path) {
+    if ($rel_path) {
+      $batch_settings['operations'][] = array($funcname, array($rel_path, $context) );
+    }
+  }
+  return $batch_settings;
+}
+
+/**
+ * Called by the batch queue, invoke import_html_import_file() and update the
+ * batch context with the status
+ */
+function import_html_import_file_batch_job($rel_path, $profile, &$batch_context) {
+  $results = import_html_import_file($rel_path, $profile);
+  if (! $results) {
+    import_html_debug(
+      'Failed to get any results from the attempted analysis of %rel_path.
+        The source file path was probably unavailable, invalid or incorrect.',
+      array('%rel_path' => $rel_path),
+      WATCHDOG_ERROR
+    );
+    return FALSE;
+  }
+
+  foreach ($results as $summary) {
+    // Almost useless loop, usually just one node per file
+    if (! empty($summary['node'])) {
+      $batch_context['message'] = "Processed <span class='rel-path'>$rel_path</span> : <span class='node-title'>" . $summary['node']->title ."</span>";
+      #$batch_context['results'][$rel_path] = $summary['node']->title;
+      # The system will link to this - things may have been renamed away from that original filename
+      $batch_context['results']['node/' . $summary['node']->nid] = $summary['node']->title;
+    }
+    else {
+      // May have been a file! That's not a failure
+      if ($summary['type'] == 'resource') {
+        $batch_context['message'] = "Imported the file <span class='rel-path'>$rel_path</span> as a resource";
+        $batch_context['results'][$summary['path']] = $rel_path;
+      }
+      else {
+        $batch_context['message'] = "FAILED to process <span class='rel-path'>$rel_path</span>";
+        $batch_context['results'][$rel_path] = "FAILED to process <span class='rel-path'>$rel_path</span>";
+      }
+    }
+  }
+
+  #return $node; // I don;t think this return value goes anywhere?
+}
+
+/**
+ * Called by the batch queue, invoke import_html_import_directory() and update
+ * the batch context with the status
+ *
+ * @param $rel_path
+ * @param $profile
+ */
+function import_html_import_directory_batch_job($rel_path, $profile, &$batch_context) {
+  // Processing a directory when in batch context means adding batch jobs to the end of the current process
+  // - that in turn may add more jobs.
+  // List the files we can, and add them as jobs.
+
+  import_html_debug("Starting batch import dir job '$rel_path' ", array('%rel_path' => $rel_path), WATCHDOG_DEBUG );
+
+  $working_path = $profile['source_siteroot'] . $rel_path;
+
+  // Scan the given directory (NOT deep), add the files, and the subdirectories.
+  // Processing the subdir will do the recursion itself
+  $dir_structure = import_html_file_scan_directory($working_path, ".*", array('.', '..', 'CVS'), 0, FALSE, 'filename', 0, NULL, 1);
+  // sort into file & folder
+  $selected_files = array();
+  $selected_dirs = array();
+  foreach ($dir_structure as $filepath => $file_info) {
+    $new_filepath = str_replace($profile['source_siteroot'], '', $filepath);
+    if (is_dir($filepath)) {
+      $selected_dirs[] = $new_filepath;
+    }
+    else {
+      $selected_files[] = $new_filepath;
+    }
+  }
+  if (empty($selected_files) && empty($selected_dirs)) {
+    drupal_set_message("No files or directories selected. Not setting any batch jobs");
+    return;
+  }
+
+  if (! empty($selected_files)) {
+    $file_batch_instructions = import_html_import_files_batch_instructions($selected_files, $profile, 'import_html_import_file_batch_job');
+    batch_set($file_batch_instructions);
+  }
+  if (! empty($selected_dirs)) {
+    $dir_batch_instructions = import_html_import_files_batch_instructions($selected_dirs, $profile, 'import_html_import_directory_batch_job');
+    batch_set($dir_batch_instructions);
+  }
+
+  import_html_debug("Batch import_dir queued %count_files files and %count_dirs dirs.", array('%count_files' => count($selected_files), '%count_dirs' => count($selected_dirs)), WATCHDOG_INFO  );
+}
+
+/**
+ * Callback function to run at the end of the batch process
+ */
+function import_html_batch_import_finished($success, $results, $operations) {
+  $duration = time() - variable_get('import_html_last_import_timestamp', time());
+
+  // results returns a list of node path -titles . Convert to something we can theme
+  array_walk(
+    $results,
+    create_function('&$title, $link', '$title = array("href" => $link, "title" => url($link) ." : ". $title);')
+  );
+
+
+  import_html_debug(
+    '<strong>Batch import completed</strong> in %duration. %count items processed (%average) : !links',
+    array(
+      '%duration' => format_interval($duration),
+      '%count' => count($results),
+      '%average' => count($results) ? format_interval($duration / count($results)) .' per item' : "no time details",
+      '!links' => theme('links', array_values($results), 'tree'),
+    ),
+    WATCHDOG_NOTICE
+  );
+  #dpm($results);
 }

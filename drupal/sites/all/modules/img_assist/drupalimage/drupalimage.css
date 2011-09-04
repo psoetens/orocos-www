@@ -1,9 +1,0 @@
-/* $Id: drupalimage.css,v 1.1.4.1 2007/04/09 22:57:22 darrenoh Exp $ */
-.mceItemDrupalImage {
-	border: 1px dotted #cc0000;
-	background-image: url('images/drupalimage.gif');
-	background-position: center;
-	background-repeat: no-repeat;
-	background-color: #ffffcc;
-}
-

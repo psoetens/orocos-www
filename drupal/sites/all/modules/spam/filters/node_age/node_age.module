@@ -1,7 +1,8 @@
 <?php
-// $Id: node_age.module,v 1.1.2.4 2008/09/17 14:32:09 jeremy Exp $
+// $Id: node_age.module,v 1.1.2.4.2.4 2009/08/06 17:55:31 gnassar Exp $
 
 /**
+ * @file
  * Node-age comment filter plug in for the spam module.
  * Copyright(c) 2008
  *  Jeremy Andrews <jeremy@tag1consulting.com>.  All rights reserved.
@@ -11,19 +12,17 @@
 /**
  * Drupal _menu() hook.
  */
-function node_age_menu($may_cache) {
+function node_age_menu() {
   $items = array();
 
-  if ($may_cache) {
-    $items[] = array(
-      'path' => 'admin/settings/spam/filters/node-age',
-      'title' => t('Node age'),
-      'callback' => 'drupal_get_form',
-      'callback arguments' => array('node_age_admin_settings'),
-      'description' => t('Configure the node age filter.'),
-      'type' => MENU_LOCAL_TASK,
-    );
-  }
+  $items['admin/settings/spam/filters/node-age'] = array(
+    'title' => 'Node age',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('node_age_admin_settings'),
+    'access arguments' => array('administer spam'),
+    'description' => 'Configure the node age filter.',
+    'type' => MENU_LOCAL_TASK,
+  );
 
   return $items;
 }
@@ -61,18 +60,24 @@ function node_age_spamapi($op, $type = NULL, $content = array(), $fields = array
  * Determine if a comment is being posted against too old of a node.
  */
 function node_age_spam_filter($content, $type, $fields, $extra = array(), $filter_test = FALSE) {
-  $action = array();
-  $id = spam_invoke_module($type, 'content_id', $content, $extra);
-  if (arg(0) == 'comment' && arg(1) == 'reply' && is_numeric(arg(2))) {
-    $nid = arg(2);
-    spam_log(SPAM_DEBUG, 'node_age_spam_filter', t('retrieved nid (@nid) from url', array('@nid' => $nid)), $type, $id);
-  }
-  else {
-    $nid = db_result(db_query('SELECT nid FROM {comments} WHERE cid = %d', $id));
-    spam_log(SPAM_DEBUG, 'node_age_spam_filter', t('retrieved nid (@nid) from database', array('@nid' => $nid)), $type, $id);
-  }
+  if ($type == 'comment') {
+    $action = array();
+    $id = spam_invoke_module($type, 'content_id', $content, $extra);
+    if (arg(0) == 'comment' && arg(1) == 'reply' && is_numeric(arg(2))) {
+      $nid = arg(2);
+      spam_log(SPAM_DEBUG, 'node_age_spam_filter', t('retrieved nid (@nid) from url', array('@nid' => $nid)), $type, $id);
+    }
+    else {
+      $nid = db_result(db_query('SELECT nid FROM {comments} WHERE cid = %d', $id));
+      spam_log(SPAM_DEBUG, 'node_age_spam_filter', t('retrieved nid (@nid) from database', array('@nid' => $nid)), $type, $id);
+    }
 
-  if ($type == 'comment' && $nid) {
+    if (!$nid) {
+      spam_log(SPAM_LOG, 'node_age_spam_filter', t('warning: nid not found for comment (@cid), skipping', array('@cid' => $id)), $type, $id);
+      $action['total'] = 0;
+      return $action;
+    }
+
     $node = spam_invoke_module('node', 'load', $nid);
     if (is_object($node)) {
       $timestamp_field = variable_get('node_age_filter_on', 'created');
@@ -88,6 +93,9 @@ function node_age_spam_filter($content, $type, $fields, $extra = array(), $filte
         $action['total'] = 0;
         spam_log(SPAM_DEBUG, 'node_age_spam_filter', t('node (@nid) is recent.', array('@nid' => $nid)), $type, $id);
       }
+    } else {
+      spam_log(SPAM_LOG, 'node_age_spam_filter', t('warning: nid (@nid) does not map to node, skipping', array('@nid' => $nid)), $type, $id);
+      $action['total'] = 0;
     }
   }
   else {
@@ -153,9 +161,9 @@ function node_age_admin_settings() {
 /**
  * Validate the configuration.
  */
-function node_age_admin_settings_validate($form_id, $form_values) {
-  $limit_short = $form_values['node_age_limit_short'];
-  $limit_long = $form_values['node_age_limit_long'];
+function node_age_admin_settings_validate($form, &$form_state) {
+  $limit_short = $form_state['values']['node_age_limit_short'];
+  $limit_long = $form_state['values']['node_age_limit_long'];
   if ($limit_short >= $limit_long) {
     form_set_error('node_age_limit_long', t('Really old content has to be older than old content.'));
   }
@@ -164,8 +172,14 @@ function node_age_admin_settings_validate($form_id, $form_values) {
 /**
  * Save the configuration.
  */
-function node_age_admin_settings_submit($form_id, $form_values) {
-  if ($form_values['op'] == t('Reset to defaults')) {
+function node_age_admin_settings_submit($form, &$form_state) {
+/* TODO The 'op' element in the form values is deprecated.
+   Each button can have #validate and #submit functions associated with it.
+   Thus, there should be one button that submits the form and which invokes
+   the normal form_id_validate and form_id_submit handlers. Any additional
+   buttons which need to invoke different validate or submit functionality
+   should have button-specific functions. */
+  if ($form_state['values']['op'] == t('Reset to defaults')) {
     variable_del('node_age_limit_short');
     variable_del('node_age_weight_short');
     variable_del('node_age_limit_long');
@@ -173,10 +187,10 @@ function node_age_admin_settings_submit($form_id, $form_values) {
     drupal_set_message('Configuration reset to defaults.');
   }
   else {
-    variable_set('node_age_limit_short', $form_values['node_age_limit_short']);
-    variable_set('node_age_weight_short', $form_values['node_age_weight_short']);
-    variable_set('node_age_limit_long', $form_values['node_age_limit_long']);
-    variable_set('node_age_weight_long', $form_values['node_age_weight_long']);
+    variable_set('node_age_limit_short', $form_state['values']['node_age_limit_short']);
+    variable_set('node_age_weight_short', $form_state['values']['node_age_weight_short']);
+    variable_set('node_age_limit_long', $form_state['values']['node_age_limit_long']);
+    variable_set('node_age_weight_long', $form_state['values']['node_age_weight_long']);
     drupal_set_message('Configuration saved.');
   }
 }

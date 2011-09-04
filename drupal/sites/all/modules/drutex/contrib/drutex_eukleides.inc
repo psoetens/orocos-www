@@ -1,5 +1,5 @@
 <?php
-// $Id: drutex_eukleides.inc,v 1.2 2006/09/06 02:25:41 dfg Exp $
+// $Id: drutex_eukleides.inc,v 1.2.8.1 2008/11/17 09:05:37 darthsteven Exp $
 
 /**
  * @file
@@ -15,7 +15,7 @@ function drutex_eukleides_info($format = -1) {
   return (object) array(
     'title' => t('Eukleides'),
     'description' => t('Provides an Eukleides environment.'),
-    'toggle' => true,
+    'toggle' => TRUE,
     'weight' => 16
   );
 }
@@ -24,7 +24,7 @@ function drutex_eukleides_info($format = -1) {
  * Implementation of subhook_defaults().
  */
 function drutex_eukleides_defaults() {
-  $D['drutex_eukleides_active'] = false;
+  $D['drutex_eukleides_active'] = FALSE;
   return $D;
 }
 

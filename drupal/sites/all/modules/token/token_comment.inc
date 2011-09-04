@@ -1,76 +1,91 @@
 <?php
-// $Id: token_comment.inc,v 1.1.2.3 2007/10/16 14:37:59 greggles Exp $
+// $Id: token_comment.inc,v 1.3.4.11 2010/07/08 00:41:19 davereid Exp $
 
 /**
- * Implementation of hook_token_values()
+ * @file
+ * Implementations of token module hooks for the core comment module.
+ *
+ * The token module requires specific hooks to be added to modules
+ * so that those modules can return data about their objects to the
+ * token API.  Until and unless token becomes a part of core, the
+ * implementations of the token hooks for core modules are provided
+ * in the token module itself.
+ * @ingroup token
+ */
+
+/**
+ * Implementation of hook_token_values().
  */
 function comment_token_values($type, $object = NULL, $options = array()) {
   $values = array();
   switch ($type) {
     case 'comment':
-      
+
       // Cast to an object just in case fussy Drupal gave us an array
       $comment = (object)$object;
 
+      $values['comment-cid']             = $comment->cid;
       $values['comment-nid']             = $comment->nid;
       $values['comment-title']           = check_plain($comment->subject);
-      $values['comment-body']            = check_markup($comment->comment, $comment->format);
+      $values['comment-body']            = check_markup($comment->comment, $comment->format, FALSE);
       $values['comment-author-name']     = check_plain($comment->name);
       $values['comment-author-uid']      = $comment->uid;
+      $values['comment-author-homepage'] = check_url($comment->homepage);
 
       // Raw counterparts of user supplied data.
       $values['comment-title-raw']       = $comment->subject;
       $values['comment-body-raw']        = $comment->comment;
       $values['comment-author-name-raw'] = $comment->name;
 
+      if (!empty($comment->mail)) {
+        $account_mail = $comment->mail;
+      }
+      elseif (!empty($comment->uid)) {
+        $account_mail = db_result(db_query("SELECT mail FROM {users} WHERE uid = %d", $comment->uid));
+      }
+      else {
+        $account_mail = '';
+      }
+      $values['comment-author-mail']     = check_plain($account_mail);
+      $values['comment-author-mail-raw'] = $account_mail;
+
       // Included in case a consuming module wants to format the body
       $values['comment-body-format']     = $comment->format;
 
-      $values['comment-yyyy']            = date('Y', $comment->timestamp);
-      $values['comment-yy']              = date('y', $comment->timestamp);
-      $values['comment-month']           = date('F', $comment->timestamp);
-      $values['comment-mon']             = date('M', $comment->timestamp);
-      $values['comment-mm']              = date('m', $comment->timestamp);
-      $values['comment-m']               = date('n', $comment->timestamp);
-      $values['comment-ww']              = date('W', $comment->timestamp);
-      $values['comment-date']            = date('N', $comment->timestamp);
-      $values['comment-day']             = date('l', $comment->timestamp);
-      $values['comment-ddd']             = date('D', $comment->timestamp);
-      $values['comment-dd']              = date('d', $comment->timestamp);
-      $values['comment-d']               = date('j', $comment->timestamp);
+      $values += token_get_date_token_values($comment->timestamp, 'comment-');
+
+      $values['comment-node-title-raw']  = db_result(db_query("SELECT title FROM {node} WHERE nid = %d", $comment->nid));
+      $values['comment-node-title']      = check_plain($values['comment-node-title-raw']);
       break;
   }
-  
+
   return $values;
 }
 
 /**
- * Implementation of hook_token_list()
+ * Implementation of hook_token_list().
  */
 function comment_token_list($type = 'all') {
   if ($type == 'comment' || $type == 'all') {
-    $tokens['comment']['comment-nid']             = t('Comment ID');
-    $tokens['comment']['comment-title']           = t('Comment title');
-    $tokens['comment']['comment-title-raw']       = t('Comment title. WARNING - raw user input');
-    $tokens['comment']['comment-body']            = t('Comment body');
-    $tokens['comment']['comment-body-raw']        = t('Comment body. WARNING - raw user input');
+    $tokens['comment']['comment-cid']             = t('The unique ID of the comment.');
+    $tokens['comment']['comment-nid']             = t('The unique ID of the node the comment was posted to.');
+    $tokens['comment']['comment-title']           = t('The title of the comment.');
+    $tokens['comment']['comment-title-raw']       = t('The title of the comment.');
+    $tokens['comment']['comment-body']            = t('The formatted content of the comment itself.');
+    $tokens['comment']['comment-body-raw']        = t('The formatted content of the comment itself.');
 
-    $tokens['comment']['comment-author-uid']      = t("Comment author's user id");
-    $tokens['comment']['comment-author-name']     = t("Comment author's user name");
-    $tokens['comment']['comment-author-name-raw'] = t("Comment author's user name. WARNING - raw user input");
+    $tokens['comment']['comment-author-uid']      = t('The unique ID of the author of the comment.');
+    $tokens['comment']['comment-author-name']     = t('The name left by the comment author.');
+    $tokens['comment']['comment-author-name-raw'] = t('The name left by the comment author.');
+    $tokens['comment']['comment-author-homepage'] = t('The home page URL left by the comment author.');
 
-    $tokens['comment']['comment-yyyy']            = t("Comment creation year (four digit)");
-    $tokens['comment']['comment-yy']              = t("Comment creation year (two digit)");
-    $tokens['comment']['comment-month']           = t("Comment creation month (full word)");
-    $tokens['comment']['comment-mon']             = t("Comment creation month (abbreviated)");
-    $tokens['comment']['comment-mm']              = t("Comment creation month (two digit, zero padded)");
-    $tokens['comment']['comment-m']               = t("Comment creation month (one or two digit)");
-    $tokens['comment']['comment-ww']              = t("Comment creation week (two digit)");
-    $tokens['comment']['comment-date']            = t("Comment creation date (day of month)");
-    $tokens['comment']['comment-day']             = t("Comment creation day (full word)");
-    $tokens['comment']['comment-ddd']             = t("Comment creation day (abbreviation)");
-    $tokens['comment']['comment-dd']              = t("Comment creation day (two digit, zero-padded)");
-    $tokens['comment']['comment-d']               = t("Comment creation day (one or two digit)");
+    $tokens['comment']['comment-author-mail']     = t('The email address left by the comment author.');
+    $tokens['comment']['comment-author-mail-raw'] = t('The email address left by the comment author.');
+
+    $tokens['comment'] += token_get_date_token_info(t('Comment creation'), 'comment-');
+
+    $tokens['comment']['comment-node-title']      = t('The title of the node the comment was posted to.');
+    $tokens['comment']['comment-node-title-raw']  = t('The title of the node the comment was posted to.');
 
     return $tokens;
   }

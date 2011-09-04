@@ -9,4 +9,6 @@ div.contemplate-scroller {
   height: 150px;
   overflow: auto;
   border: 1px solid #666;
+  max-width: 900px;
+  min-width: 300px;
 }

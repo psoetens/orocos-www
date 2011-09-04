@@ -7,15 +7,18 @@ an administrator can restrict what input filters are available to what nodes.  T
 are applied after the role-based restrictions, so it can never offer more input formats than the
 default role-based input formats would.
 
+Note that at this time, this module applies only to the body field of nodes that are created
+by the node module or else use the exact same form structure as the node module.
+
 REQUIREMENTS
 
-- Drupal 5
+- Drupal 6
 
 INSTALLATION
 
 - Copy the filterbynodetype directory to your modules directory.
 - Go to admin/build/modules and enable it.
-- Go to admin/settings/filterbynodetype and set which input formats should(n't) be available on which node types
+- Go to the settings form for each node type and set which input formats should(n't) be available.
 
 AUTHOR AND CREDIT
 
@@ -23,5 +26,4 @@ Larry Garfield
 larry at garfieldtech dot com
 http://www.garfieldtech.com/
 
-This module was originally developed for www.Star-Fleet.com and released under the GNU General
-Public License v2.
+This module was originally developed for www.Star-Fleet.com.

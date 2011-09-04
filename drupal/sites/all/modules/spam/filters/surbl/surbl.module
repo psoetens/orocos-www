@@ -1,10 +1,11 @@
 <?php
-// $Id: surbl.module,v 1.1.2.2 2008/08/04 18:47:24 jeremy Exp $
+// $Id: surbl.module,v 1.1.2.2.2.1 2008/12/25 05:42:10 jeremy Exp $
 
 /**
+ * @file
  * Surbl filter plug in for the spam module.
  * Copyright(c) 2007-2008
- *  Jeremy Andrews <jeremy@tag1consulting.com>. 
+ *  Jeremy Andrews <jeremy@tag1consulting.com>.
  *
  */
 
@@ -60,7 +61,7 @@ function _surbl_url_extract($content, $type, $fields, $extra = array()) {
     $content = (array)$content;
   }
 
- if (!isset($urls["$type-$id"])) {
+  if (!isset($urls["$type-$id"])) {
     $string = '';
     foreach ($fields['main'] as $field) {
       $string .= $content["$field"] .' ';
@@ -82,7 +83,7 @@ function _surbl_url_extract($content, $type, $fields, $extra = array()) {
       preg_match("/^()?([^\/\"\']+)/i", $url, $domain);
       // get root domain (ie sample.com)
       preg_match("/[^\.\/]+\.[^\.\/]+$/", $domain[2], $root);
-      $u[md5($root[0])] = htmlspecialchars(strtolower($root[0]));
+      $u[md5($root[0])] = htmlspecialchars(drupal_strtolower($root[0]));
     }
     $urls["$type-$id"] = $u;
   }
@@ -137,7 +138,7 @@ function surbl_spam_filter($content, $type, $fields, $extra = array(), $filter_t
       }
     }
   }
-  
+
   if ($spam) {
     $action['total'] = 99;
   }

@@ -1,614 +1,621 @@
 <?php
-// $Id: content.install,v 1.14.2.32 2008/09/04 23:01:27 yched Exp $
+// $Id: content.install,v 1.85.2.33 2009/07/14 22:17:05 yched Exp $
+
+function content_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time
+  $t = get_t();
+  if (module_exists('views') && (!function_exists('views_api_version') || views_api_version() < 2.0)) {
+    $requirements['cck_views'] = array(
+      'title' => $t('CCK - No Views integration'),
+      'description' => $t("CCK integration with Views module requires Views 6.x-2.0-rc2 or greater."),
+      'severity' => REQUIREMENT_ERROR,
+    );
+  }
+  return $requirements;
+}
+
+/**
+ * 'Safe' version of content_types() to use in updates and installs.
+ *
+ * Can't safely use content_fields() or content_types() in an update to get
+ * a fields array, especially without knowing what field modules are enabled,
+ * or the current state of the database and cache, so create a fields array
+ * from database info that is limited to fields from modules that are
+ * currently enabled.
+ */
+function content_types_install() {
+  drupal_load('module', 'content');
+  module_load_include('inc', 'content', '/includes/content.crud');
+  $module_field_types = $module_widgets = array();
+  foreach (module_list() as $module) {
+    if ($field_type = module_invoke($module, 'field_info')) {
+      $module_field_types[$module] = $field_type;
+    }
+    if ($widget_type = module_invoke($module, 'widget_info')) {
+      $module_widgets[$module] = $widget_type;
+    }
+  }
+  $fields = array();
+  $db_result = db_query("SELECT * FROM {". content_instance_tablename() ."} nfi ".
+    " LEFT JOIN {". content_field_tablename() ."} nf ON nf.field_name = nfi.field_name");
+  while ($row = db_fetch_array($db_result)) {
+    $field = array_merge($row, unserialize($row['global_settings']));
+    unset($field['global_settings']);
+
+    // There may be module data available for currently disabled modules,
+    // or missing module data for currently enabled modules, so start over
+    // to get only field info for enabled modules.
+    unset($field['module']);
+    unset($field['widget_module']);
+    // 'columns' is a reserved word in MySQL4, so our column is named 'db_columns'.
+    $field['columns'] = isset($field['db_columns']) ? $field['db_columns'] : array();
+    unset($field['db_columns']);
+
+    foreach ($module_field_types as $module => $types) {
+      foreach ($types as $type_name => $type) {
+        if ($field['type'] == $type_name) {
+          $field['module'] = $module;
+        }
+      }
+    }
+    foreach ($module_widgets as $module => $types) {
+      foreach ($types as $type_name => $type) {
+        if ($field['widget_type'] == $type_name) {
+          $field['widget_module'] = $module;
+        }
+      }
+    }
+    if (!empty($field['module']) && !empty($field['widget_module'])) {
+      $field['widget_settings'] = unserialize($field['widget_settings']);
+      $field['display_settings'] = unserialize($field['display_settings']);
+      $field['columns'] = (array) module_invoke($field['module'], 'field_settings', 'database columns', $field);
+      $field = content_field_instance_expand($field);
+      $fields[$field['type_name']][$field['field_name']] = $field;
+    }
+  }
+  return $fields;
+}
 
 /**
  * Implementation of hook_install().
- *
- * The 4.7 install file had creation text for a node_type table that is now created by core.
- * The install script for that table has been removed from the 5.x branch install file.
- * Refer to the 4.7 install file to see the original database configuration script.
  */
 function content_install() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      db_query("CREATE TABLE {node_field} (
-        field_name varchar(32) NOT NULL default '',
-        type varchar(127) NOT NULL default '',
-        global_settings mediumtext NOT NULL,
-        required int NOT NULL default '0',
-        multiple int NOT NULL default '0',
-        db_storage int NOT NULL default '0',
-        PRIMARY KEY  (field_name)
-      ) /*!40100 DEFAULT CHARACTER SET utf8 */");
-      db_query("CREATE TABLE {node_field_instance} (
-        field_name varchar(32) NOT NULL default '',
-        type_name varchar(32) NOT NULL default '',
-        weight int NOT NULL default '0',
-        label varchar(255) NOT NULL default '',
-        widget_type varchar(32) NOT NULL default '',
-        widget_settings mediumtext NOT NULL,
-        display_settings mediumtext NOT NULL,
-        description mediumtext NOT NULL,
-        PRIMARY KEY  (field_name,type_name)
-      ) /*!40100 DEFAULT CHARACTER SET utf8 */");
-      db_query("CREATE TABLE {cache_content} (
-        cid varchar(255) NOT NULL default '',
-        data longblob,
-        expire int NOT NULL default '0',
-        created int NOT NULL default '0',
-        headers text,
-        PRIMARY KEY (cid),
-        INDEX expire (expire)
-      ) /*!40100 DEFAULT CHARACTER SET UTF8 */ ");
-      break;
-
-    case 'pgsql':
-      db_query("CREATE TABLE {node_field} (
-        field_name varchar(32) NOT NULL default '',
-        type varchar(127) NOT NULL default '',
-        global_settings text NOT NULL,
-        required integer NOT NULL default '0',
-        multiple integer NOT NULL default '0',
-        db_storage integer NOT NULL default '0',
-        PRIMARY KEY  (field_name)
-      )");
-      db_query("CREATE TABLE {node_field_instance} (
-        field_name varchar(32) NOT NULL default '',
-        type_name varchar(32) NOT NULL default '',
-        weight integer NOT NULL default '0',
-        label varchar(255) NOT NULL default '',
-        widget_type varchar(32) NOT NULL default '',
-        widget_settings text NOT NULL,
-        display_settings text NOT NULL,
-        description text NOT NULL,
-        PRIMARY KEY  (field_name,type_name)
-      )");
-      db_query("CREATE TABLE {cache_content} (
-        cid varchar(255) NOT NULL default '',
-        data bytea,
-        expire int NOT NULL default '0',
-        created int NOT NULL default '0',
-        headers text,
-        PRIMARY KEY (cid)
-      )");
-      db_query("CREATE INDEX {cache_content}_expire_idx ON {cache_content} (expire)");
-      break;
-  }
-  variable_set('content_schema_version', 1003);
+  variable_set('content_schema_version', 6009);
+  drupal_install_schema('content');
 }
 
-// When upgrading from 4.7, the {cache_content} table has to be created
-// before any update is executed.
-if (function_exists('update_sql') && !db_table_exists('cache_content')) {
-  content_update_create_cache_table();
-}
 
-function content_update_create_cache_table() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("CREATE TABLE {cache_content} (
-        cid varchar(255) NOT NULL default '',
-        data longblob,
-        expire int NOT NULL default '0',
-        created int NOT NULL default '0',
-        headers text,
-        PRIMARY KEY (cid),
-        INDEX expire (expire)
-      ) /*!40100 DEFAULT CHARACTER SET UTF8 */ ");
-      break;
-    case 'pgsql':
-      $ret[] = update_sql("CREATE TABLE {cache_content} (
-        cid varchar(255) NOT NULL default '',
-        data bytea,
-        expire int NOT NULL default '0',
-        created int NOT NULL default '0',
-        headers text,
-        PRIMARY KEY (cid)
-      )");
-      $ret[] = update_sql("CREATE INDEX {cache_content}_expire_idx ON {cache_content} (expire)");
-      break;
+/**
+ * Implementation of hook_uninstall().
+ */
+function content_uninstall() {
+  drupal_uninstall_schema('content');
+  // The variable is used during the uninstall process,
+  // so we removed it at the very end.
+  variable_del('content_schema_version');
+  // Remove extra weights.
+  foreach (node_get_types('names') as $type_name) {
+    variable_del("content_extra_weights_$type_name");
   }
 }
 
 /**
- * Add storage for per-field help text.
+ * Implementation of hook_enable().
  */
-function content_update_2() {
-  $ret = array();
-
-  switch ($GLOBALS['db_type']) {
-    case 'pgsql':
-      db_add_column($ret, 'node_field_instance', 'description', 'text', array('not null' => TRUE, 'default' => ''));
-      break;
-
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {node_field_instance} ADD COLUMN description mediumtext NOT NULL");
-      break;
-  }
-
-  return $ret;
+function content_enable() {
+  // Make sure old data is emptied out of the caches, since it
+  // may no longer be valid since the module was last enabled,
+  // especially if not all the same field modules are enabled
+  // as before. Especially needed during updates.
+  cache_clear_all('*', 'cache_content', TRUE);
+  content_clear_type_cache(TRUE);
 }
 
 /**
- * Add information about where data is stored.
+ * Implementation of hook_disable().
  */
-function content_update_3() {
-  $ret = array();
-
-  switch ($GLOBALS['db_type']) {
-    case 'pgsql':
-      db_add_column($ret, 'node_field', 'db_storage', 'integer', array('not null' => TRUE, 'default' => '0'));
-      break;
-
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {node_field} ADD COLUMN db_storage int NOT NULL default 0");
-      break;
-  }
-
-  return $ret;
+function content_disable() {
+  // Make sure old data is emptied out of the caches, since it
+  // may no longer be valid when the module is re-enabled.
+  cache_clear_all('*', 'cache_content', TRUE);
+  content_clear_type_cache(TRUE);
 }
 
 /**
- * Add tables for content types to store their data.
+ * Implementation of hook_schema.
  */
-function content_update_4() {
-  $ret = array();
+function content_schema() {
 
-  // Figure out what table to update. If node_type exists and node_type_content does not, this update is
-  // being done by an early version of core that did not rename the node_type table, so use the original name, node_type.
-  // If both table names exist, core has renamed the table, so use the renamed table name, node_type_content.
-  if (!db_table_exists('node_type_content')) {
-    $result = db_query("SELECT type_name FROM {node_type}");
+  // Static (meta) tables.
+
+  $schema['content_node_field'] = array(
+    'fields' => array(
+      'field_name'      => array('type' => 'varchar', 'length' => 32, 'not null' => TRUE, 'default' => ''),
+      'type'            => array('type' => 'varchar', 'length' => 127, 'not null' => TRUE, 'default' => ''),
+      'global_settings' => array('type' => 'text', 'size' => 'medium', 'not null' => TRUE, 'serialize' => TRUE),
+      'required'        => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0),
+      'multiple'        => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0),
+      'db_storage'      => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 1),
+      'module'          => array('type' => 'varchar', 'length' => 127, 'not null' => TRUE, 'default' => ''),
+      'db_columns'      => array('type' => 'text', 'size' => 'medium', 'not null' => TRUE, 'serialize' => TRUE),
+      'active'          => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0),
+      'locked'          => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0),
+    ),
+    'primary key' => array('field_name'),
+  );
+  $schema['content_node_field_instance'] = array(
+    'fields' => array(
+      'field_name'       => array('type' => 'varchar', 'length' => 32, 'not null' => TRUE, 'default' => ''),
+      'type_name'        => array('type' => 'varchar', 'length' => 32, 'not null' => TRUE, 'default' => ''),
+      'weight'           => array('type' => 'int', 'not null' => TRUE, 'default' => 0),
+      'label'            => array('type' => 'varchar', 'length' => 255, 'not null' => TRUE, 'default' => ''),
+      'widget_type'      => array('type' => 'varchar', 'length' => 32, 'not null' => TRUE, 'default' => ''),
+      'widget_settings'  => array('type' => 'text', 'size' => 'medium', 'not null' => TRUE, 'serialize' => TRUE),
+      'display_settings' => array('type' => 'text', 'size' => 'medium', 'not null' => TRUE, 'serialize' => TRUE),
+      'description'      => array('type' => 'text', 'size' => 'medium', 'not null' => TRUE),
+      'widget_module'    => array('type' => 'varchar', 'length' => 127, 'not null' => TRUE, 'default' => ''),
+      'widget_active'    => array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0),
+    ),
+    'primary key' => array('field_name', 'type_name'),
+  );
+  $schema['cache_content'] = drupal_get_schema_unprocessed('system', 'cache');
+
+  // When the module is first installed, the remaining code in the schema
+  // will create errors, since these tables have not yet been created.
+  // We don't need to create data tables on initial installation anyway
+  // since no fields have been created yet, so just return with this much
+  // of the schema.
+
+  if (!db_table_exists('content_node_field') || !db_table_exists('content_node_field_instance')) {
+    return $schema;
   }
-  else {
-    $result = db_query("SELECT type_name FROM {node_type_content}");
-  }
-  while ($type = db_fetch_object($result)) {
-    switch ($GLOBALS['db_type']) {
-      case 'mysql':
-      case 'mysqli':
-        $ret[] = update_sql("CREATE TABLE {node_". strtr($type->type_name, '-', '_') ."} (
-            vid int unsigned NOT NULL default '0',
-            nid int unsigned NOT NULL default '0',
-            PRIMARY KEY (vid)
-          ) /*!40100 DEFAULT CHARACTER SET utf8 */");
-        break;
 
-      case 'pgsql':
-        $ret[] = update_sql("CREATE TABLE {node_". strtr($type->type_name, '-', '_') ."} (
-            vid int_unsigned NOT NULL default '0',
-            nid int_unsigned NOT NULL default '0',
-            PRIMARY KEY (vid)
-          )");
-        break;
-    }
-  }
+  // Dynamic (data) tables.
 
-  return $ret;
-}
+  drupal_load('module', 'content');
 
-/**
- * Move data from per-field storage to per-content-type storage where possible.
- */
-function content_update_5() {
-  $ret = array();
+  // We can't use many helper functions here, like content_fields() or
+  // content_types() or we risk creating a fatal loop from circular
+  // logic when they call other functions that use this schema, so create
+  // the schema directly from a fresh query of the database.
 
-  include_once('./'. drupal_get_path('module', 'content') .'/content.module');
-  include_once('./'. drupal_get_path('module', 'content') .'/content_admin.inc');
+  // content_table_schema() and content_database_info() have no
+  // circular logic and are safe to use here.
 
-  content_clear_type_cache();
+  $db_result = db_query("SELECT * FROM {". content_instance_tablename() ."} nfi ".
+    " LEFT JOIN {". content_field_tablename() ."} nf ON nf.field_name = nfi.field_name WHERE nf.active = 1 AND nfi.widget_active = 1");
+  while ($field = db_fetch_array($db_result)) {
+    // 'columns' is a reserved word in MySQL4, so our db column is named 'db_columns'.
+    $field['columns'] = unserialize($field['db_columns']);
+    unset($field['db_columns']);
 
-  $result = db_query('SELECT nf.field_name FROM {node_field} nf LEFT JOIN {node_field_instance} nfi ON nfi.field_name = nf.field_name WHERE nf.multiple = 0 AND nf.db_storage = 0 GROUP BY nfi.field_name HAVING COUNT(*) = 1');
+    $content_table = _content_tablename($field['type_name'], CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
+    $field_table = _content_tablename($field['field_name'], CONTENT_DB_STORAGE_PER_FIELD);
 
-  if (db_num_rows($result)) {
-    // Multi-part update
-    if (!isset($_SESSION['content_update_5'])) {
-      $_SESSION['content_update_5'] = 0;
-      $_SESSION['content_update_5_max'] = db_num_rows($result);
+
+    // We always add a 'per content type' table for each content type that
+    // has fields.
+    if (!isset($schema[$content_table])) {
+      $schema[$content_table] = content_table_schema();
     }
 
-    $field = db_fetch_array($result);
-    $fields = content_fields();
-    $field = $fields[$field['field_name']];
-    $field_types = _content_field_types();
-    $field_type = $field_types[$field['type']];
-    $columns = module_invoke($field_type['module'], 'field_settings', 'database columns', $field);
-
-    $ret[] = update_sql("UPDATE {node_field} SET db_storage = ". CONTENT_DB_STORAGE_PER_CONTENT_TYPE ." WHERE field_name = '". $field['field_name'] ."'");
-    if (is_array($columns) && count($columns)) {
-      $new_field = $field;
-      $new_field['db_storage'] = CONTENT_DB_STORAGE_PER_CONTENT_TYPE;
-      content_alter_db_field($field, $columns, $new_field, $columns);
+    $base_schema = content_table_schema($field);
+    if ($field['db_storage'] == CONTENT_DB_STORAGE_PER_FIELD) {
+      // Per-field storage: add the 'per field' table if needed.
+      if (!isset($schema[$field_table])) {
+        $schema[$field_table] = $base_schema;
+      }
     }
-
-    $_SESSION['content_update_5']++;
-    $ret['#finished'] = $_SESSION['content_update_5'] / $_SESSION['content_update_5_max'];
-    return $ret;
+    else {
+      // Per-type storage: merge the information for the field
+      // in the existing table.
+      $schema[$content_table]['fields'] = array_merge($schema[$content_table]['fields'], $base_schema['fields']);
+      $schema[$content_table]['content fields'] = array_merge($schema[$content_table]['content fields'], $base_schema['content fields']);
+    }
   }
+  return $schema;
+}
+
+function content_update_last_removed() {
+  return 1008;
 }
 
 /**
- * The cache for nodes has changed to account for revisions correctly.
- */
-function content_update_6() {
-  return array(update_sql('DELETE FROM {cache}'));
-}
-
-/**
- * Rename the "content-" prefix to "content_" to aid in form theming.
- */
-function content_update_7() {
-  $ret = array();
-
-  // Figure out what table to update. If node_type exists and node_type_content does not, this update is
-  // being done by an early version of core that did not rename the node_type table, so use the original name, node_type.
-  // If both table names exist, core has renamed the table, so use the renamed table name, node_type_content.
-  if (!db_table_exists('node_type_content')) {
-    $table_name = 'node_type';
-  }
-  else {
-    $table_name = 'node_type_content';
-  }
-  $type_result = db_query("SELECT type_name FROM {". $table_name ."} WHERE type_name LIKE 'content-%%'");
-
-  if (db_num_rows($type_result)) {
-    // Multi-part update
-    if (!isset($_SESSION['content_update_7'])) {
-      $_SESSION['content_update_7'] = 0;
-      $_SESSION['content_update_7_max'] = db_num_rows($type_result);
-    }
-
-    $type = db_fetch_object($type_result);
-    $old_type_name = $type->type_name;
-    $new_type_name = str_replace('content-', 'content_', $old_type_name);
-    $ret[] = update_sql("UPDATE {node} SET type = '". $new_type_name ."' WHERE type = '". $old_type_name ."'");
-    $ret[] = update_sql("UPDATE {". $table_name ."} SET type_name = '". $new_type_name ."' WHERE type_name = '". $old_type_name ."'");
-    $ret[] = update_sql("UPDATE {node_field_instance} SET type_name = '". $new_type_name ."' WHERE type_name = '". $old_type_name ."'");
-    $ret[] = update_sql("UPDATE {vocabulary_node_types} SET type = '". $new_type_name ."' WHERE type = '". $old_type_name ."'");
-
-    $variable_result = db_query("SELECT name, value FROM {variable} WHERE name LIKE '%%%s%%' OR value LIKE '%%%s%%'", $old_type_name, $old_type_name);
-    while ($variable = db_fetch_object($variable_result)) {
-      $new_name = str_replace($old_type_name, $new_type_name, $variable->name);
-      $new_value = str_replace($old_type_name, $new_type_name, $variable->value);
-      db_query("UPDATE {variable} SET name = '%s', value = '%s' WHERE name = '%s'", $new_name, $new_value, $variable->name);
-    }
-
-    $ret[] = update_sql('DELETE FROM {cache}');
-
-    $_SESSION['content_update_7']++;
-    $ret['#finished'] = $_SESSION['content_update_7'] / $_SESSION['content_update_7_max'];
-    return $ret;
-  }
-}
-
-/**
- * Rename the "node_type" table to avoid a conflict with a later core addition
- */
-function content_update_8() {
-  $ret = array();
-  if (!db_table_exists('node_type_content')) {
-    switch ($GLOBALS['db_type']) {
-      case 'mysql':
-      case 'mysqli':
-        $ret[] = update_sql('RENAME TABLE {node_type} TO {node_type_content}');
-        break;
-
-      case 'pgsql':
-        $ret[] = update_sql('ALTER TABLE {node_type} RENAME TO {node_type_content}');
-        break;
-    }
-  }
-  return $ret;
-}
-
-/**
- *  Fix corrupted db due to a bug in 1.3 release (http://drupal.org/node/115332)
- */
-function content_update_10() {
-  $ret = array();
-
-  include_once('./'. drupal_get_path('module', 'content') .'/content.module');
-  include_once('./'. drupal_get_path('module', 'content') .'/content_admin.inc');
-
-  // drop fields with no field instances
-  $fields = array();
-  $result = db_query("SELECT DISTINCT(field_name)  FROM {node_field_instance}");
-  while ($row = db_fetch_array($result)) {
-    $fields[] = "'". $row['field_name'] ."'";
-  }
-  $ret[] = update_sql("DELETE FROM {node_field} WHERE field_name NOT IN (". implode(', ', $fields) .")");
-
-  // set invalid 'per field storage' back to 'per content type'
-  $result = db_query("SELECT field_name FROM {node_field} WHERE multiple = 0 AND db_storage = %d", CONTENT_DB_STORAGE_PER_FIELD);
-  while ($row = db_fetch_array($result)) {
-    $count = db_num_rows(db_query("SELECT field_name FROM {node_field_instance} WHERE field_name = '%s'", $row['field_name']));
-    if ($count == 1) {
-      $field = content_fields($row['field_name']);
-      $db_info = content_database_info($field);
-      $new_field = $field;
-      $new_field['db_storage'] = CONTENT_DB_STORAGE_PER_CONTENT_TYPE;
-      content_alter_db_field($field, $db_info['columns'], $new_field, $db_info['columns']);
-    }
-  }
-
-  return $ret;
-}
-
-/**
- *  Start 5.0 update series
+ * Helper function for module updates :
+ * - checks no updates are pending for content.module
+ * - checks content module and the module being updated are both enabled.
  *
- *  First, catch up for databases which did not get node_type table renamed in 4.7 before updating to 5.0
- *  We'll know them because update_8 will rename the node_type table to node_content_type leaving no table named node_type
- *  A core patch has been submitted to get the rename done by the system module, so we need to test whether the table is already renamed
+ * @param $module
+ *   The name of the module being updated.
  */
-
-function content_update_1000() {
+function content_check_update($module = NULL) {
   $ret = array();
-
-  if (!db_table_exists('node_type')) {
-    // rerun system_update_1005(), if it failed the first time it was run
-    $ret = system_update_1005();
-  }
-  return $ret;
-}
-
-/**
- *  Copy node_type_content table back to core node_type table
- */
-function content_update_1001() {
-  $ret = array();
-
-  if (db_table_exists('node_type_content')) {
-    $result = db_query("SELECT type_name, label, description, help, title_label FROM {node_type_content}");
-    while ($data = db_fetch_object($result)) {
-      $ret[] = update_sql("INSERT INTO {node_type}
-         (type, name, module, description, help, has_title, title_label, has_body, body_label, custom, orig_type, min_word_count)
-           VALUES ('". db_escape_string($data->type_name) ."', '". db_escape_string($data->label) ."', 'node', '". db_escape_string($data->description) ."', '". db_escape_string($data->help) ."', 1, '". db_escape_string($data->title_label) ."', 0, '', 1, '". db_escape_string($data->type_name) ."', 0)");
+  // Check that modules are enabled before running their updates.
+  if (!module_exists('content') || ($module && !module_exists($module))) {
+    drupal_set_message(t("Updates for CCK-related modules are not run until the modules are enabled on the <a href=\"@admin-modules-path\">administer modules page</a>. When you enable them, you'll need to return to <a href=\"@update-php\">update.php</a> and run the remaining updates.", array('@admin-modules-path' => url('admin/build/modules'), '@update-php' => base_path() .'update.php?op=selection')), 'warning', FALSE);
+    // The content module is not enabled, nothing else can happen.
+    if ($module && !module_exists('content') && module_exists($module)) {
+      $query_message = t('!module.module has updates but cannot be updated because content.module is not enabled.<br />If and when content.module is enabled, you will need to re-run the update script. You will continue to see this message until the module is enabled and updates are run.', array('!module' => $module));
     }
-    $ret[] = update_sql("DROP TABLE {node_type_content}");
-    $ret[] = update_sql('DELETE FROM {cache}');
-  }
-
-  return $ret;
-}
-
-/**
- * Add display_settings column
- */
-function content_update_1002() {
-  $ret = array();
-
-  // See if this column was already added in 4.7.
-  $result = db_fetch_array(db_query_range("SELECT * FROM {node_field_instance}", array(), 0, 1));
-  if (isset($result['display_settings'])) {
+    // The requested module is not enabled, which may be intentional.
+    // Just let the user know there are updates to be processed if enabled later.
+    else {
+      $query_message = t('!module.module has updates and is available in the modules folder but is not enabled.<br />If and when it is enabled, you will need to re-run the update script. You will continue to see this message until the module is enabled and updates are run.', array('!module' => $module ? $module : 'content'));
+    }
+    $ret['#abort'] = array('success' => FALSE, 'query' => $query_message);
     return $ret;
   }
-
-  switch ($GLOBALS['db_type']) {
-    case 'pgsql':
-      db_add_column($ret, 'node_field_instance', 'display_settings', 'text', array('not null' => TRUE, 'default' => "''"));
-      break;
-
-    case 'mysql':
-    case 'mysqli':
-      $ret[] = update_sql("ALTER TABLE {node_field_instance} ADD COLUMN display_settings mediumtext NOT NULL");
-      break;
+  // Check that content.module is up-to-date before running field module updates.
+  if ($module && (drupal_get_installed_schema_version('content', TRUE) < max(drupal_get_schema_versions('content')))) {
+    drupal_set_message(t('Some updates are still pending. Please return to <a href="@update-php">update.php</a> and run the remaining updates.', array('@update-php' => base_path() .'update.php?op=selection')), 'warning', FALSE);
+    $ret['#abort'] = array('success' => FALSE, 'query' => t('Some updates are still pending.<br/>Please re-run the update script.'));
+    return $ret;
   }
-
-  return $ret;
+  // If everything is OK and updates are not aborted, make sure
+  // content_associate_fields() gets run. With all the complexity of
+  // the dependent updates, it can get missed when an update is aborted.
+  // It won't hurt anything to do this more than once in order to be sure
+  // it doesn't get skipped. Without this step, we can end up with
+  // field modules that are enabled and updated, but not marked as active
+  // in the content_node_field table.
+  if ($module and module_exists($module)) {
+    content_associate_fields($module);
+  }
 }
 
 /**
- *  Rename data tables to avoid collision with core node_* tables
+ * Add module name to fields table to make it easier to identify the fields to delete when a module
+ * is uninstalled.
+ *
+ * Needed because the value drops out of content_info() when module is disabled, so there
+ * is no other way to find the associated fields.
  */
-function content_update_1003() {
+function content_update_6000() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
   $ret = array();
 
-  include_once('./'. drupal_get_path('module', 'content') .'/content.module');
-  include_once('./'. drupal_get_path('module', 'content') .'/content_admin.inc');
+  drupal_load('module', 'content');
+  if (db_column_exists(content_field_tablename(), 'active')) {
+    return $ret;
+  }
+  db_add_field($ret, content_field_tablename(), 'module', array('type' => 'varchar', 'length' => 127, 'not null' => TRUE, 'default' => ''));
+  db_add_field($ret, content_field_tablename(), 'db_columns', array('type' => 'text', 'size' => 'medium', 'not null' => TRUE, 'initial' => ''));
+  db_add_field($ret, content_field_tablename(), 'active', array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0));
+  db_add_field($ret, content_instance_tablename(), 'widget_module', array('type' => 'varchar', 'length' => 127, 'not null' => TRUE, 'default' => ''));
+  db_add_field($ret, content_instance_tablename(), 'widget_active', array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0));
 
-  $rename = array();
-
-  $types = content_types();
-  $fields = content_fields();
-
-  // "per content type" tables
-  foreach ($types as $type) {
-    $old_name = _content_tablename($type['type'], CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
-    $new_name = _content_tablename($type['type'], CONTENT_DB_STORAGE_PER_CONTENT_TYPE, 1003);
-    if (db_table_exists($old_name)) {
-      if (!in_array($old_name, array('node_access',  'node_comments_statistics', 'node_counter', 'node_field', 'node_field_instance', 'node_group', 'node_group_fields', 'node_revisions', 'node_type'))) {
-        $rename[$old_name] = $new_name;
-      }
-      else {
-        // TODO : what ? create the table ?
-      }
-    }
+  // This will update the table for any modules enabled at this time.
+  foreach (module_list() as $module) {
+    content_associate_fields($module);
   }
 
-  // "per field" tables
-  foreach ($fields as $field) {
-    $old_name = _content_tablename($field['field_name'], CONTENT_DB_STORAGE_PER_FIELD);
-    $new_name = _content_tablename($field['field_name'], CONTENT_DB_STORAGE_PER_FIELD, 1003);
-    $old_name = 'node_data_'.$field['field_name'];
-    $new_name = 'content_'. $field['field_name'];
-    if (db_table_exists($old_name)) {
-      $rename[$old_name] = $new_name;
-    }
+  // Fix the cache_content schema
+  if (db_table_exists('cache_content')) {
+    db_drop_table($ret, 'cache_content');
   }
+  db_create_table($ret, 'cache_content', drupal_get_schema_unprocessed('system', 'cache'));
+  variable_set('content_schema_version', 6000);
 
-  // rename
-  foreach ($rename as $old_name => $new_name) {
-    switch ($GLOBALS['db_type']) {
-      case 'mysql':
-      case 'mysqli':
-        $ret[] = update_sql("RENAME TABLE {". $old_name ."} TO {". $new_name ."}");
-        break;
+  // The cache table had to be used to store data until this update ran,
+  // so clear cache out now that we're switching back to the cache_content table.
+  $ret[] = update_sql('DELETE FROM {cache}');
 
-      case 'pgsql':
-        $ret[] = update_sql("ALTER TABLE {". $old_name ."} RENAME TO {". $new_name ."}");
-        break;
-    }
-  }
-
-  variable_set('content_schema_version', 1003);
   return $ret;
 }
 
 /**
- *  Fix corrupted db due to a bug in 1.3 release (http://drupal.org/node/115332)
+ * Rename node_field and node_field_instance tables.
+ *
+ * This is a carryover from when the data tables were renamed,
+ * postponed so we wouldn't create any more havoc than necessary
+ * until a major version change.
+ *
+ * Using 'content_node_field' instead of 'content_field'
+ * to avoid conflicts with field tables that will be prefixed
+ * with 'content_field'.
  */
-function content_update_1004() {
+function content_update_6001() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
+  $ret = array();
+  drupal_load('module', 'content');
+  if (db_table_exists('content_node_field')) {
+    return $ret;
+  }
+  db_rename_table($ret, 'node_field', 'content_node_field');
+  db_rename_table($ret, 'node_field_instance', 'content_node_field_instance');
+  variable_set('content_schema_version', 6001);
+  content_clear_type_cache(TRUE);
+  return $ret;
+}
+
+/**
+ * Get rid of automatic per content tables for content types that have no fields.
+ * Switching to adding those tables only when needed.
+ */
+function content_update_6002() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
   $ret = array();
 
-  include_once('./'. drupal_get_path('module', 'content') .'/content.module');
-  include_once('./'. drupal_get_path('module', 'content') .'/content_admin.inc');
+  drupal_load('module', 'content');
+  $db_types = content_types_install();
+  $field_types = array();
 
-  // drop fields with no field instances
-  $fields = array();
-  $result = db_query("SELECT DISTINCT(field_name) FROM {node_field_instance}");
-  while($row = db_fetch_array($result)) {
-    $fields[] = "'". $row['field_name'] ."'";
-  }
-  if ($fields) {
-    $ret[] = update_sql("DELETE FROM {node_field} WHERE field_name NOT IN (". implode(', ', $fields) .")");
+  $result = db_query("SELECT DISTINCT type_name FROM {". content_instance_tablename() ."}");
+  while ($type = db_fetch_array($result)) {
+    $field_types[] = $type['type_name'];
   }
 
-  // drop 'content_type_' table
-  $table = _content_tablename('', CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
-  if (db_table_exists($table)) {
-    $ret[] = update_sql("DROP TABLE {".$table."}");
-  }
-
-  // set invalid 'per field storage' back to 'per content type'
-  $result = db_query("SELECT field_name FROM {node_field} WHERE multiple = 0 AND db_storage = %d", CONTENT_DB_STORAGE_PER_FIELD);
-  while ($row = db_fetch_array($result)) {
-    $count = db_num_rows(db_query("SELECT field_name FROM {node_field_instance} WHERE field_name = '%s'", $row['field_name']));
-    if ($count == 1) {
-      $field = content_fields($row['field_name']);
-      $db_info = content_database_info($field);
-      $new_field = $field;
-      $new_field['db_storage'] = CONTENT_DB_STORAGE_PER_CONTENT_TYPE;
-      content_alter_db_field($field, $db_info['columns'], $new_field, $db_info['columns']);
+  foreach ($db_types as $content_type => $content_info) {
+    if (!in_array($content_type, $field_types)) {
+      $table = _content_tablename($content_type, CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
+      if (db_table_exists($table)) {
+        db_drop_table($ret, $table);
+      }
     }
   }
-
+  variable_set('content_schema_version', 6002);
+  content_clear_type_cache(TRUE);
   return $ret;
 }
 
 /**
- *  Empty update - Was regenerating views after update_1003.
- *  Not needed with Views 1.6 anymore.
+ * 'db_columns' column 1st got introduced as 'columns', which is forbidden in MySQL 4.
+ * This update function will only be useful for early D6 testers...
  */
-function content_update_1005() {
-  return array();
-}
+function content_update_6003() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
 
-/**
- *  Set text db columns to accept NULL values for mysql (see http://drupal.org/node/108094)
- */
-function content_update_1006() {
   $ret = array();
-
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-      include_once('./'. drupal_get_path('module', 'content') .'/content.module');
-      include_once('./'. drupal_get_path('module', 'content') .'/content_admin.inc');
-
-      $types = content_types();
-      $fields = content_fields();
-
-      foreach ($fields as $field) {
-        $db_info = content_database_info($field);
-        foreach ($db_info['columns'] as $column => $attributes) {
-          if (in_array($attributes['type'], array('text', 'mediumtext', 'longtext'))) {
-            content_db_change_column($db_info['table'], $attributes['column'], $attributes['column'], $attributes['type'], $attributes);
-            $ret[] = array(
-              'query' => strtr('The text field %field has been updated to accept NULL values.', array('%field' => $field['field_name'])),
-              'success' => TRUE
-            );
-          }
-        }
-      }
+  if (db_column_exists('content_node_field', 'columns')) {
+    db_change_field($ret, 'content_node_field', 'columns', 'db_columns', array('type' => 'text', 'size' => 'medium', 'not null' => TRUE));
   }
-
+  variable_set('content_schema_version', 6003);
   return $ret;
-}
-
-
-/**
- *  Empty update - Was : create the {cache_content} table.
- *  This is now executed in content_update_create_cache_table()
- *  before any update is run.
- */
-function content_update_1007() {
-  return array();
-}
-
-/**
- *  CCK 1.5 / Views 1.6 message
- */
-function content_update_1008() {
-  if (module_exists('views') && !function_exists('views_update_12')) {
-    drupal_set_message('This version of CCK is targetted to work with Views 1.6 or above. For a better CCK / Views integration, it is advised you update your Views installation.', 'error');
-  }
-  return array();
 }
 
 /**
  * Index the 'nid' column on data tables to optimize node deletion.
  * Large tables might deserve a multipass update.
  */
-function content_update_1009() {
+function content_update_6004(&$sandbox) {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
   $ret = array();
 
+  // Do nothing if the indexes were already created by D5's content_update_1009.
+  if (variable_get('content_update_1009', FALSE)) {
+    return $ret;
+  }
+
   // Gather list of tables.
-  if (!isset($_SESSION['content_update_1009_tables'])) {
-    $_SESSION['content_update_1009']['tables'] = array();
-    // Get per-field tables.
-    $result = db_query('SELECT * FROM {node_field_instance} nfi '.
-      ' LEFT JOIN {node_field} nf ON nf.field_name = nfi.field_name WHERE db_storage = %d', CONTENT_DB_STORAGE_PER_FIELD);
+  if (!isset($sandbox['tables'])) {
+    drupal_load('module', 'content');
+    $sandbox['tables'] = array();
+    $result = db_query('SELECT * FROM {'. content_instance_tablename() .'} nfi '.
+      ' LEFT JOIN {'. content_field_tablename() .'} nf ON nf.field_name = nfi.field_name');
     while ($field = db_fetch_array($result)) {
-      $table = _content_tablename($field['field_name'], CONTENT_DB_STORAGE_PER_FIELD);
-      $_SESSION['content_update_1009_tables'][$table] = $table;
+      if ($field['db_storage'] == CONTENT_DB_STORAGE_PER_FIELD) {
+        $table = _content_tablename($field['field_name'], CONTENT_DB_STORAGE_PER_FIELD);
+      }
+      else {
+        $table = _content_tablename($field['type_name'], CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
+      }
+      $sandbox['tables'][$table] = $table;
     }
-    // Additionally, get all per-type tables.
-    foreach (node_get_types() as $type) {
-      $table = _content_tablename($type->type, CONTENT_DB_STORAGE_PER_CONTENT_TYPE);
-      $_SESSION['content_update_1009_tables'][$table] = $table;
-    }
-    $_SESSION['content_update_1009_count'] = count($_SESSION['content_update_1009_tables']);
+    $sandbox['count'] = count($sandbox['tables']);
   }
 
   // One pass : add index on one table.
-  $table = array_shift($_SESSION['content_update_1009_tables']);
-  if (db_table_exists($table)) {
-    switch ($GLOBALS['db_type']) {
-      case 'mysql':
-      case 'mysqli':
-        $ret[] = update_sql("ALTER TABLE {". $table ."} ADD INDEX (nid)");
-        break;
-      case 'pgsql':
-        $ret[] = update_sql("CREATE INDEX {". $table ."}_nid_idx ON {". $table ."}(nid)");
-        break;
-    }
+  if ($table = array_shift($sandbox['tables'])) {
+    db_add_index($ret, $table, 'nid', array('nid'));
   }
-  $ret['#finished'] = 1 - count($_SESSION['content_update_1009_tables']) / $_SESSION['content_update_1009_count'];
+
+  if ($sandbox['count']) {
+    $ret['#finished'] = 1 - count($sandbox['tables']) / $sandbox['count'];
+  }
+  variable_set('content_schema_version', 6004);
   return $ret;
 }
 
 /**
- * Prepare smooth D6 upgrade : set a variable showing that indexes for 'nid'
- * were already created in content_update_1009, so that content_update_6004
- * doesn't attempt to recreate them.
+ * Add 'locked' property for fields.
  */
-function content_update_1010() {
+function content_update_6005() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
   $ret = array();
-  variable_set('content_update_1009', TRUE);
+  drupal_load('module', 'content');
+  db_add_field($ret, content_field_tablename(), 'locked', array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0));
+  variable_set('content_schema_version', 6005);
+  return $ret;
+}
+
+/**
+ * Make sure the 'locked' column is NOT NULL (error in previous content_update_6005().
+ */
+function content_update_6006() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
+  $ret = array();
+  drupal_load('module', 'content');
+  db_change_field($ret, content_field_tablename(), 'locked', 'locked', array('type' => 'int', 'size' => 'tiny', 'not null' => TRUE, 'default' => 0));
+  variable_set('content_schema_version', 6006);
+  return $ret;
+}
+
+/**
+ * Dummy update function to make sure the theme registry and css / JS aggregated files
+ * are updated.
+ */
+function content_update_6007() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
+  variable_set('content_schema_version', 6007);
+  return array();
+}
+
+/**
+ * Dummy update function to make sure schema version gets updated.
+ */
+function content_update_6008() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
+  variable_set('content_schema_version', 6008);
+  return array();
+}
+
+/**
+ * Add the 'exclude from $content' display setting to all existing field instances.
+ */
+function content_update_6009() {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+
+  $ret = array();
+  $result = db_query("SELECT *  FROM {content_node_field_instance}");
+  while ($type = db_fetch_array($result)) {
+    $new_settings = array();
+    $display_settings = unserialize($type['display_settings']);
+    if (!empty($display_settings)) {
+      foreach ($display_settings as $key => $val) {
+        $new_settings[$key] = $val;
+        if ($key !== 'label' && is_array($val)) {
+          $new_settings[$key]['exclude'] = 0;
+        }
+      }
+    }
+    else {
+      $new_settings = array(
+        'label' => array('format' => 'above'),
+        'full' => array('format' => 'default', 'exclude' => 0),
+        'teaser' => array('format' => 'default', 'exclude' => 0),
+        );
+    }
+    db_query("UPDATE {content_node_field_instance} SET display_settings='%s' WHERE field_name='%s' AND type_name='%s'", serialize($new_settings), $type['field_name'], $type['type_name']);
+  }
+  variable_set('content_schema_version', 6009);
+  return $ret;
+}
+
+/**
+ * Fix multiple serialization caused by per-field to per-type migration.
+ * See http://drupal.org/node/407446.
+ */
+function content_update_6010(&$sandbox) {
+  if ($abort = content_check_update()) {
+    return $abort;
+  }
+  $ret = array();
+
+  drupal_load('module', 'content');
+
+  // Gather list of tables and columns that need to be updated.
+  if (!isset($sandbox['tables'])) {
+    $sandbox['tables'] = array();
+    $fields = content_fields();
+    foreach ($fields as $name => $field) {
+      $db_info = content_database_info($field);
+      foreach ($db_info['columns'] as $column => $attributes) {
+        if (isset($attributes['serialize']) && $attributes['serialize']) {
+          $sandbox['tables'][$db_info['table']]['table'] = $db_info['table'];
+          $sandbox['tables'][$db_info['table']]['columns'][] = $attributes['column'];
+          $sandbox['tables'][$db_info['table']]['multiple'] = $field['multiple'];
+        }
+      }
+    }
+    $sandbox['count'] = count($sandbox['tables']);
+    $sandbox['current_vid'] = 0;
+    $sandbox['current_delta'] = 0;
+  }
+
+  // Number of rows to fix in one pass.
+  $limit = 500;
+  // Start correcting data.
+  if ($table_info = array_shift($sandbox['tables'])) {
+    $table = $table_info['table'];
+    $columns = $table_info['columns'];
+
+    if ($table_info['multiple']) {
+      $query = "SELECT * FROM {" . $table . "} WHERE (vid = %d AND delta > %d) OR (vid > %d) ORDER BY vid ASC, delta ASC";
+      $args = array($sandbox['current_vid'], $sandbox['current_delta'], $sandbox['current_vid']);
+    }
+    else {
+      $query = "SELECT * FROM {" . $table . "} WHERE vid > %d ORDER BY vid ASC";
+      $args = array($sandbox['current_vid']);
+    }
+    $result = db_query_range($query, $args, 0, $limit);
+    $count = 0;
+    while ($row = db_fetch_array($result)) {
+      $update_query = $update_args = array();
+      foreach ($columns as $column) {
+        $data = $row[$column];
+        // No need to do anything if the data is NULL.
+        if (!empty($data)) {
+          // Unserialize until we get something that is not a string
+          while (is_string($data)) {
+            $unserialized = @unserialize($data);
+            if ($unserialized !== FALSE) {
+              $data = $unserialized;
+            }
+            else {
+              // TODO : test with a serialized string, just in case...
+              break;
+            }
+          }
+          // Re-serialize once.
+          $data = serialize($data);
+          // If we end up with something different than what we started with, update.
+          if ($data !== $row[$column]) {
+            $update_query[] = "$column = '%s'";
+            $update_args[] = $data;
+          }
+        }
+      }
+      if ($update_query) {
+        $update_args[] = $row['vid'];
+        db_query("UPDATE {" . $table . "} SET ". implode(', ', $update_query) ." WHERE vid = %d", $update_args);
+      }
+      $sandbox['current_vid'] = $row['vid'];
+      $sandbox['current_delta'] = isset($row['delta']) ? $row['delta'] : 0;
+      $count++;
+    }
+    if ($count == $limit) {
+      // Add the table back into the list of tables to be processed if rows remain.
+      array_unshift($sandbox['tables'], $table_info);
+    }
+    else {
+      // Done with this table: reset vid and delta markers.
+      $sandbox['current_vid'] = 0;
+      $sandbox['current_delta'] = 0;
+      $ret[] = array('success' => TRUE, 'query' => "Fixed serialized values in table $table");
+    }
+  }
+
+  if ($sandbox['count']) {
+    $ret['#finished'] = 1 - count($sandbox['tables']) / $sandbox['count'];
+  }
   return $ret;
 }

@@ -5,7 +5,7 @@
  * filtering and apply actions to block, unblock, delete or email the selected
  * users.
  *
- * $Id: advuser_filters.inc,v 1.1.2.12 2008/06/09 17:26:38 earnie Exp $
+ * $Id: advuser_filters.inc,v 1.2.2.3 2009/06/23 15:33:25 earnie Exp $
  **/
 
 /**
@@ -22,6 +22,7 @@ function advuser_filter_form() {
     '#title' => t('Show only users where'),
     '#theme' => 'advuser_filters',
     '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
     );
   foreach ($session as $filter) {
     list($type, $value, $op, $qop) = $filter;
@@ -68,6 +69,7 @@ function advuser_filter_form() {
     }
   }
 
+
   foreach ($filters as $key => $filter) {
     $names[$key] = $filter['title'];
     switch ($filter['form_type']) {
@@ -83,6 +85,7 @@ function advuser_filter_form() {
           '#size' => 20,
           '#maxlength' => 25,
           '#default_value' => 'now',
+          '#description' => 'You can enter this as an actual date (e.g. "'. date('M d Y') .'") or how long ago (e.g. "1 month 4 day 13hours ago")',
         );
       } break;
       case 'id': {
@@ -220,15 +223,15 @@ function theme_advuser_filter_form($form) {
 /**
  * Validate values entered.
  */
-function advuser_filter_form_validate($fid, &$fval) {
+function advuser_filter_form_validate($form, &$form_state) {
   $ret = FALSE;
-
-  if ($fid == 'advuser_filter_form') {
-    switch ($fval['filter']) {
+ 
+  if ($form_state['#id'] == 'advuser_filter_form') {
+    switch ($form_state['values']['filter']) {
       case 'last_access': {
-        switch (strtolower($fval['last_access'])) {
+        switch (strtolower($form_state['values']['last_access'])) {
           case 'never': {
-            $fval['last_access'] = 0;
+            $form_state['values']['last_access'] = 0;
             $ret = TRUE;
           } break;;
 
@@ -237,12 +240,12 @@ function advuser_filter_form_validate($fid, &$fval) {
           } break;
 
           default: {
-            if (!empty($fval['last_access']) && strtotime($fval['last_access']) <= 0) {
+            if (!empty($form_state['values']['last_access']) && strtotime($form_state['values']['last_access']) <= 0) {
               form_set_error('date', t('You have to specify a valid date to filter by Accessed.'));
               $ret = FALSE;
             }
             else {
-              $fval['last_access'] = strtotime($fval['last_access']);
+              $form_state['values']['last_access'] = strtotime($form_state['values']['last_access']);
               $ret = TRUE;
             }
           } break;
@@ -250,12 +253,12 @@ function advuser_filter_form_validate($fid, &$fval) {
       } break;
 
       case 'created': {
-        if (!empty($fval['created']) && strtotime($fval['created']) <= 0) {
+        if (!empty($form_state['values']['created']) && strtotime($form_state['values']['created']) <= 0) {
           form_set_error('date', t('You have to specify a valid date to filter by Created.'));
           $ret = FALSE;
         }
         else {
-          $fval['created'] = strtotime($fval['created']);
+          $form_state['values']['created'] = strtotime($form_state['values']['created']);
           $ret = TRUE;
         }
 
@@ -319,6 +322,12 @@ function advuser_filters() {
     'title' => t('User Id'),
     'where' => "u.uid %op %d",
     'form_type' => 'id',
+  );
+
+  $filters['username'] = array(
+    'title' => t('Username'),
+    'where' => "u.name %op '%s'",
+    'form_type' => 'textfield',
   );
 
   $roles = advuser_user_roles();
@@ -440,57 +449,51 @@ function advuser_build_filter_query() {
 /**
  * Process result from user administration filter form.
  */
-function advuser_filter_form_submit($form_id, $form_values) {
-  $op = $form_values['op'];
+function advuser_filter_form_submit($form, &$form_state) {
+  $op = $form_state['values']['op'];
   $filters = advuser_filters();
   $ret = 'admin/user/user/advuser';
 
   switch ($op) {
+    case t('Undo'): 
+      array_pop($_SESSION['advuser_overview_filter']);
+      break;
+    case t('Reset'): 
+      $_SESSION['advuser_overview_filter'] = array();
+      break;
+    case t('Update'): 
+      $ret = NULL;
+      break;
     case t('Filter'):
-    case t('Refine'): {
-      if (isset($form_values['filter'])) {
-        $filter = $form_values['filter'];
+    case t('Refine'):
+    default:
+      if (isset($form_state['values']['filter'])) {
+        $filter = $form_state['values']['filter'];
         if ($filters[$filter]['form_type'] == 'select') {
           // Merge an array of arrays into one if necessary.
-          $options = $filter == 'permission' 
-       ? call_user_func_array(
-      'array_merge', 
-      $filters[$filter]['options']
-        ) 
-       : $filters[$filter]['options']
-    ;
-          if (isset($options[$form_values[$filter]])) {
+          $options = $filter == 'permission' ? call_user_func_array('array_merge', $filters[$filter]['options']) : $filters[$filter]['options'] ;
+          if (isset($options[$form_state['values'][$filter]])) {
             $_SESSION['advuser_overview_filter'][] = array(
-        $filter, 
-        $form_values[$filter], 
-        $form_values['filters_ops'], 
-        $form_values['filters_qops'],
-      );
+              $filter, 
+              $form_state['values'][$filter], 
+              $form_state['values']['filters_ops'], 
+              $form_state['values']['filters_qops'],
+            );
           }
         } else {
-          if (isset($form_values[$filter])) {
+          if (isset($form_state['values'][$filter])) {
             $_SESSION['advuser_overview_filter'][] = array(
-        $filter, 
-        $form_values[$filter], 
-        $form_values['filters_ops'], 
-        $form_values['filters_qops']
-      );
+               $filter, 
+               $form_state['values'][$filter], 
+               $form_state['values']['filters_ops'], 
+               $form_state['values']['filters_qops']
+            );
           }
         }
       }
-    } break;
-    case t('Undo'): {
-      array_pop($_SESSION['advuser_overview_filter']);
-    } break;
-    case t('Reset'): {
-      $_SESSION['advuser_overview_filter'] = array();
-    } break;
-    case t('Update'): {
-      $ret = NULL;
-    } break;
+      break;
   }
-
-  return $ret;
+  $form_state['#redirect'] = $ret;
 }
 
 /**

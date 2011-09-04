@@ -1,63 +1,102 @@
 <?php
-// $Id: filterbynodetype.module,v 1.1.2.1 2007/06/11 05:55:25 crell Exp $
+// $Id: filterbynodetype.module,v 1.7 2008/10/23 04:29:33 crell Exp $
 
 /**
- * Implementation of hook_menu
+ * @file
+ * The Filter By Node Type module, which makes input filter configurable on a per-content-type basis.
+ *
+ * Drupal core gives you no possibility to limit given input filters to a defined set of
+ * content types. This functionality is provided by the Filter By Node Type module. Common usage
+ * examples are:
+ *  - a designated filter for forums, blog entries etc. etc.
  */
-function filterbynodetype_menu($may_cache) {
-  $items = array();
 
-   if ($may_cache) {
-      // We can't put this under the existing filters menu, sadly, because the help text added 
-      // by the filters module looks all out of place on our page the.
-      $items[] = array(
-        'path' => 'admin/settings/filterbynodetype',
-        'title' => t('Input filter node types'),
-        'callback' => 'drupal_get_form',
-        'callback arguments' => array('filterbynodetype_settings'),
-        'weight' => 2,
-        'access' => user_access('administer filters'),
-      );
-  }
-
-  return $items;
+/**
+ * Implementation of hook_perm().
+ */
+function filterbynodetype_perm() {
+  return array('bypass filter restrictions');
 }
 
+/**
+ * Implementation of hook_form_alter().
+ *
+ * Allow users with the necessary permission to change what input formats
+ * are allowed on a give node type.
+ */
+function filterbynodetype_form_node_type_form_alter(&$form, $form_state) {
+
+  $options = array();
+  foreach (filter_formats() as $format) {
+    $options[$format->format] = $format->name;
+  }
+
+  $defaults = array();
+  foreach (filter_formats() as $format) {
+    $defaults[] = variable_get('filterbynodetype_' . $format->format . '_' . $form['#node_type']->type, 1);
+  }
+
+  $form['submission']['input_formats'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Allowed input formats'),
+    '#description' => t('Specify which input formats will be allowed on this node type\'s body field.  Note that a user must still have access to the appropriate input format in order to be able to use it.'),
+    '#options' => $options,
+    '#default_value' => $defaults,
+    '#access' => user_access('adminster filters'),
+  );
+
+  // Attach our submit handler so we can save our extra values.
+  $form['#submit'][] = 'filterbynodetype_node_type_form_submit';
+}
 
 /**
- * Implementation of hook_form_alter
+ * Submit function for our admin form additions
+ *
+ * @see filterbynodetype_form_node_type_form_alter()
  */
-function filterbynodetype_form_alter($form_id, &$form) {
-  if (isset($form['type']) && 'node-form' == $form['#id']) {
+function filterbynodetype_node_type_form_submit($form, &$form_state) {
+  $form_values = $form_state['values'];
+  foreach (filter_formats() as $format) {
+    variable_set('filterbynodetype_' . $format->format . '_' . $form_values['type'], $form_values['input_formats'][$format->format]);
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function filterbynodetype_form_alter(&$form, $form_state, $form_id) {
+
+  // For node edit forms, filter out disallowed input formats.
+  if (isset($form['#node']) && $form['#node']->type .'_node_form' == $form_id && !user_access('bypass filter restrictions')) {
     $type = $form['type']['#value'];
-    $formats =& $form['body_filter']['format'];
+    $formats =& $form['body_field']['format'];
     foreach (element_children($formats) as $element) {
-      if (! variable_get('filterbynodetype_' . $formats[$element]['#return_value'] . '_' . $type, 1)) {
+      if (isset($formats[$element]['#return_value']) && ! variable_get('filterbynodetype_' . $formats[$element]['#return_value'] . '_' . $type, 1)) {
         unset($formats[$element]);
       }
     }
 
     if (2 == count(element_children($formats))) { // 1 format and 1 extra item for the link
       // If there's only one filter left, fold it down to just the description
-      $formats = $form['body_filter']['format'];
-      unset($form['body_filter']['format']);
+      $formats = $form['body_field']['format'];
+      unset($form['body_field']['format']);
       // We don't know what the IDs are of the two fields, so we have to iterate to get them.
       foreach (element_children($formats) as $element) {
         if (isset($formats[$element]['#title'])) {
           // This is a filter, so we assign it to the filter set as the only option.
-          $form['body_filter']['format'][$element] = array(
+          $form['body_field']['format'][$element] = array(
             '#type' => 'value',
             '#value' => $element,
             '#parents' => array('format'),
           );
-          $form['body_filter']['format']['format'] = array( // I have no idea why it uses this structure, but this is what filter.module does.
+          $form['body_field']['format']['format'] = array( // I have no idea why it uses this structure, but this is what filter.module does.
             '#type' => 'item',
             '#description' => $formats[$element]['#description'],
           );
         }
         else {
           // It's the guidelines text.
-          $form['body_filter']['format']['guidelines_link'] = array(
+          $form['body_field']['format']['guidelines_link'] = array(
             '#value' => $formats[$element]['#value'],
           );
         }
@@ -67,65 +106,4 @@ function filterbynodetype_form_alter($form_id, &$form) {
       // Do nothing.  The form becomes unsubmittable all on its own.
     }
   }
-}
-
-
-
-function filterbynodetype_settings() {
-  
-  $form = array();
-  
-  $types = node_get_types();
-  $formats = filter_formats();
-  
-  // Switch around to be filter-first.  Row-major order
-  
-  foreach ($formats as $format) {
-    $form['format_' . $format->format] = array(
-      '#type' => 'fieldset',
-      '#title' => t($format->name),
-      '#collapsible' => TRUE,
-      '#collapsed' => FALSE,
-      '#tree' => FALSE,
-    );
-    foreach ($types as $type) {
-      $form['format_' . $format->format]['filterbynodetype_' . $format->format . '_' . $type->type] = array(
-        '#type' => 'checkbox',
-        '#title' => t($type->name),
-        '#default_value' => variable_get('filterbynodetype_' . $format->format . '_' . $type->type, 1),
-      );
-    }
-  }
-
-  return system_settings_form($form);
-}
-
-function theme_filterbynodetype_settings($form) {
-
-  $output = '';
-  $header = array('');
-  $rows = array();
-  $first = TRUE;
-
-  foreach (element_children($form) as $fieldset) {
-    if ('fieldset' != $form[$fieldset]['#type']) continue;   // Skip non-fieldset elements
-    
-    $row = array($form[$fieldset]['#title']); // The fieldset titles become row labels
-    foreach (element_children($form[$fieldset]) as $element) {
-      if ($first) {
-        $header[] = $form[$fieldset][$element]['#title'];
-      }
-      $form[$fieldset][$element]['#title'] = '';   // It's already in the header, so we don't need it here
-      $row[] = drupal_render($form[$fieldset][$element]);
-    }
-    $rows[] = $row;
-    $first = FALSE;
-    unset($form[$fieldset]);  // Ensure that we don't render the empty fieldset
-  }
-
-  $output = theme('table', $header, $rows);
-
-  $output .= drupal_render($form);
-
-  return $output;
 }

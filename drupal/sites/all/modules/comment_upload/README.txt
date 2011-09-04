@@ -1,55 +1,87 @@
-$Id: README.txt,v 1.1.4.3 2007/01/18 07:14:35 heine Exp $
+$Id: README.txt,v 1.2.2.7 2008/09/15 16:45:15 heine Exp $
 
-Description
-===========
-Comment upload allows users to attach files to individual comments.
+Comment upload provides the ability to upload "file attachments" to comments.
 
+Compared to Comment upload 5.x, the 6.x version still lacks views integration.
 
-Dependencies
+Comment upload requires at least Drupal 6.4.
+
+INSTALLATION
 ============
-Comment upload depends on the following core modules:
+- Copy the comment_upload folder from the archive to sites/all/modules.
 
-* Upload
-* Comment
+- Visit Administer >> Site building >> Modules (admin/build/modules) and enable
+  the comment upload module (under Other).
+
+- Configure permission on Administer >> User management >> Permissions 
+  (admin/user/permissions)
+
+- Enable attachments for specific content types on the edit pages of specific
+  content types reached via the edit links on Administer >> Content management >> 
+  Content types (admin/content/node-type).
 
 
-Installation & Configuration
-============================
-1. Copy the folder in the archive to your module folder (e.g. sites/all/modules).
-2. Enable comment upload on Administer >> Site building >> Modules (admin/build/modules).
-3. Configure the module
-   * Enable "Attachments on comments" by editing content types on
-     Administer >> Content management >> Content types (admin/content/types).
-   * Choose on Administer >> Site configuration >> File uploads (admin/settings/uploads)
-     whether to have single or multiple uploads per comment.
-     You can choose whether to display images inline by selecting "Inline display"
-     for the "Images on comments" setting.
+CONFIGURATION
+=============
 
-All other settings are inherited from the Upload module.
+- You can enable uploads per content type on the edit pages of specific content
+  types. Use the edit links on Administer >> Content management >> Content types 
+  (admin/content/node-type) to access these pages.
 
-Support
+- Display of images is governed by the Image attachments on comments setting.
+  
+  - Display as attachments will include images in the attachments table.
+  - Display as full image will add the entire image below the comment.
+  
+  If you install imagecache (http://drupal.org/project/imagecache) you will see
+  additional 'Display via imagecache preset [presetname] options for any 
+  preset you have created.
+  
+  This is useful to ensure your page is not distorted by overly large images.
+
+- Comment upload provides two permissions:
+
+  - "upload files to comments"
+  - "view files uploaded to comments"
+
+- Allowed extensions and the maximum allowed upload sizes are taken from the 
+  Upload module settings on Administer >> Site configuration >> File uploads 
+  (admin/settings/uploads).
+
+
+THEMING
 =======
-If you require support, file a support request or post on the Drupal.org forum.
+To override the display of attachments, copy the file
+"comment-upload-attachments.tpl.php" to your PHPtemplate theme to make changes.
 
-* Support request - <http://drupal.org/node/add/project-issue/comment_upload/support>.
-* Drupal.org forum - <http://drupal.org/forum>.
+Variables:
 
-Please search for answers before doing so however.
+$images      - an array of images (when not set to Display as attachments).
 
-Bug reports & Feature requests
-==============================
-Please submit bug reports and feature requests to the issue tracker:
+with each element containing:
+  'url'      - url of the full image
+  'image'    - <img> tag
 
-* Bug reports - <http://drupal.org/node/add/project-issue/comment_upload/bug>.
-* Feature requests - <http://drupal.org/node/add/project-issue/comment_upload/feature>.
+$attachments - an array of attachments
 
-Please search for existing issues on <http://drupal.org/project/issues/37197>.
+with each element containing:
+  'url'      -  url of the file
+  'zebra'    - 'odd' or 'even' to enable zebra striping
+  'text'     - description when set or filename of the file
+  'size'     - size of the file in bytes, kB or Mb.
 
-Current maintainer
-==================
-Heine Deelstra <http://drupal.org/user/17943>.
 
-This started as chx's proof-of-concept project to demonstrate the new hooks in
-Drupal 4.7's comment.module. Then Eaton got his hands on it and started hacking with it.
+NOTE
+====
+As comment_upload heavily modifies the way comment form submission works, there
+is a chance that it is not compatible with other modules changing the comment form.
 
-It's still very early in the development cycle, and will continue to grow.
+
+AUTHORS & COPYRIGHT
+===================
+Comment upload 4.7.x and 5.x were written by Károly Négyesi and Jeff Eaton.
+Comment upload 6.x was written by Heine Deelstra.
+
+Comment upload 6.x Copyright (c) 2008 Ustima Web Development.
+
+This module is licensed under the  GPL v2. See LICENSE.txt for details.

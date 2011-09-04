@@ -1,12 +1,17 @@
 <?php
-// $Id: geshifilter.conflicts.inc,v 1.1.2.4 2008/05/01 17:01:02 soxofaan Exp $
+// $Id: geshifilter.conflicts.inc,v 1.7 2009/07/12 23:24:48 soxofaan Exp $
 
-require_once('geshifilter.inc');
+/**
+ * @file
+ * Implementation of the conflict detection feature of the GeSHi filter.
+ */
+
+require_once drupal_get_path('module', 'geshifilter') .'/geshifilter.inc';
 
 /**
  * Menu callback for filter conflicts page
  */
-function _geshifilter_admin_filter_conflicts($check_only=FALSE) {
+function geshifilter_admin_filter_conflicts($check_only=FALSE) {
   // start
   $output = '';
   // check if GeSHi library is available
@@ -76,20 +81,20 @@ function _geshifilter_htmlfilter_conflicts($format, $cfilter, $geshifilter) {
   // check tag escaping of html filter
   if (variable_get("filter_html_$format", FILTER_HTML_STRIP) == FILTER_HTML_ESCAPE) {
     $conflicts[] = array(
-      'description' => t('%cfilter is configured to "%escape", which is likely to cause propblems with %geshifilter.',
-        array('%cfilter' => $cfilter->name, '%geshifilter' => $geshifilter->name, '%escape' => t('Escape all tags'))),
-      'solution' => l(t('Configure HTML filtering to "%strip"', array('%strip'=> t('Strip disallowed tags'))), "admin/settings/filters/$format/configure", array(), NULL, NULL, FALSE, TRUE),
+      'description' => t('%cfilter is configured to "Escape all tags", which is likely to cause problems with %geshifilter.',
+        array('%cfilter' => $cfilter->name, '%geshifilter' => $geshifilter->name)),
+      'solution' => l(t('Configure HTML filtering to "Strip disallowed tags"'), "admin/settings/filters/$format/configure", array('html' => TRUE)),
     );
   }
   return $conflicts;
 }
 
 /**
- * conflict detection for codefilter
+ * Conflict detection for codefilter.
  */
 function _geshifilter_codefilter_conflicts($format, $cfilter, $geshifilter) {
   $conflicts = array();
-  if (_geshifilter_brackets($format) != GESHIFILTER_BRACKETS_SQUARE) {
+  if (in_array(GESHIFILTER_BRACKETS_ANGLE, array_filter(_geshifilter_tag_styles($format)))) {
     list($generic_code_tags, $language_tags, $tag_to_lang) = _geshifilter_get_tags($format);
     if (in_array('code', $generic_code_tags) || in_array('code', $language_tags)) {
       $conflicts[] = array(

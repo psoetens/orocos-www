@@ -1,3 +1,10 @@
+Mailsave for Drupal 6.x
+-----------------------
+This is the first official release of mailsave for Drupal 6. At this time
+only the main mailsave module and the clean up filters are ready for use.
+The mailsave_to_image module isn't available as the image module itself
+hasn't been officially released.
+
 Mailsave version 2 for Drupal 5.x
 ---------------------------------
 If you have used a previous version of mailsave please make sure to read
@@ -79,4 +86,4 @@ to allow creation of image nodes. This allows you to fine tune who can do what.
 
 Files are now saved in the regular drupal files directory.
 
-; $Id: README.txt,v 1.7 2007/10/23 22:04:01 stuartgreenfield Exp $
+; $Id: README.txt,v 1.9 2008/07/12 21:31:51 stuartgreenfield Exp $

@@ -1,0 +1,10 @@
+/* $Id: imagefield_assist.css,v 1.1.2.1 2009/07/04 15:40:33 lourenzo Exp $ */
+
+.mceItemDrupalImage {
+  border: 1px dotted #cc0000;
+  background-image: url('images/drupalimage.gif');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #ffffcc;
+}
+

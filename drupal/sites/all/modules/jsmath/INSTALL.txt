@@ -1,0 +1,34 @@
+; $Id: INSTALL.txt,v 1.4.2.1 2010/07/17 01:01:17 alexiswilke Exp $
+
+The installation consists of downloading the module code, the jsMath script and
+the jsMath fonts and then enabling the module. Here are the steps:
+
+1) Extract the jsmath.tar.gz file into your /sites/all/modules/ directory. This
+   creates a jsmath subdirectory holding the module's files.
+
+2) Download jsMath-v3.x.zip from http://downloads.sourceforge.net/jsmath/
+   and extract it in the /sites/all/libraries folder (create libraries if
+   necessary.) This creates a sub-directory named jsMath holding the jsMath
+   scripts.
+
+3) Download jsMath-fonts-1.x.zip from http://downloads.sourceforge.net/jsmath/
+   and also extract it into the /sites/all/libraries directory. This creates
+   a sub-directory jsMath/fonts holding the fonts.
+
+4) If you want to make the AMSmath symbol fonts available then also download
+   the files http://www.math.union.edu/~dpvc/jsMath/download/extra-fonts/msam10/msam10.zip
+   and http://www.math.union.edu/~dpvc/jsMath/download/extra-fonts/msbm10/msbm10.zip
+   and extract them into the jsMath/fonts directory. Any other additional
+   fonts you may want to intall can be found on the page at
+   http://www.math.union.edu/~dpvc/jsMath/download/extra-fonts/welcome.html
+
+5) Go to the module admin section (Administer -> Site building -> Modules) and 
+   enable the "jsmath" module. 
+
+6) Go to the Administer -> Site configuration -> jsMath settings where
+   you can change the default settings for jsMath.
+
+7) Go to the Administer -> Input filter settings and add the filter to your
+   input format(s). Make sure only known & trusted users get access to the
+   module.
+

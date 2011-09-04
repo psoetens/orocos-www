@@ -1,4 +1,4 @@
-# $Id: ja.po,v 1.1.2.2 2007/05/08 18:30:29 imagine Exp $
+# $Id: ja.po,v 1.1 2007/05/08 18:25:56 imagine Exp $
 # -----------------------------------------------------------------------------
 # Japanese translation of Drupal (contemplate.module)
 #

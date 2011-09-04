@@ -1,5 +1,5 @@
 <?php
-// $Id: mailsave_to_image_attach.module,v 1.2.2.1 2008/03/23 22:41:18 stuartgreenfield Exp $
+// $Id: mailsave_to_image_attach.module,v 1.2 2007/10/23 22:04:02 stuartgreenfield Exp $
 
 /**
  * This module interacts with mailsave
@@ -93,29 +93,14 @@ function _mailsave_to_image_attach_attempt_image_attach(&$node) {
       $file->error = 0;
       $file->source = 'mailsave';
 
-      // The following code is adapted from image_attach.module
-      // The key change is that image nodes will follow the default image publish settings, unless the 'parent'
-      // node (via mailhandler) explicitly defines a publication setting, in which case this is used instead.
+
+      // START OF CODE FROM image_attach.module
+
+      //$image->title = $_POST['image_title'];
       $image->uid = $node->uid;
       $image->name = $node->name;
       $image->created = $node->created;
       $image->type = 'image';
-
-      // Set the image node's defaults according to the configured preferences
-      $node_options = variable_get('node_options_image', array('status', 'promote'));
-      foreach (array('status', 'promote', 'sticky') as $option) {
-        $image->$option = in_array($option, $node_options);
-      }
-
-      // If the parent node is configured to be unpublished then set the image node unpublished too
-      if (isset($node->status) && !$node->status) {
-          $image->status = 0;
-      }
-
-      // Set comment default, if mailhandler hasn't already set something
-      if (module_exists('comment') && !isset($node->comment)) {
-        $image->comment = variable_get('comment_image', COMMENT_NODE_READ_WRITE);
-      }
 
       // image_prepare($image, 'image');
       image_prepare($image, $file);
@@ -131,7 +116,7 @@ function _mailsave_to_image_attach_attempt_image_attach(&$node) {
         }
       }
 
-      // End of code adapted from image_attach.module
+      // END OF CODE FROM image_attach.module
 
     }
   }

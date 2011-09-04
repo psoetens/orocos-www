@@ -1,0 +1,223 @@
+<?php
+// $Id: jsmath.module,v 1.9.2.7 2010/08/29 23:13:52 alexiswilke Exp $
+
+
+define('JSMATH_DEFAULT_DELIMITERS', "'[math]','[/math]','[display]','[/display]'");
+
+/**
+ * Implementation of hook_menu().
+ *
+ * Creates the menu entry for the jsMath admin settings
+ */
+function jsmath_menu() {
+  $items['admin/settings/jsmath'] = array(
+    'title' => 'jsMath settings',
+    'description' => 'Options for jsMath TeX typesetting',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('_jsmath_settings'),
+    'access callback' => 'user_access',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'jsmath.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Get the current delimiters
+ *
+ * @param[in] $no_quotes   set to true to get rid of the ' characters
+ *
+ * @return the delimiters to use with jsMath
+ */
+function _jsmath_delims($no_quotes = FALSE) {
+  $delims = variable_get('jsmath_customDelimiters', JSMATH_DEFAULT_DELIMITERS);
+  if ($no_quotes) {
+    $delims = str_replace("'", "", $delims);
+  }
+  return $delims;
+}
+
+/**
+ * Determine the jsMath library location and return its path.
+ */
+function _jsmath_library_path() {
+  static $jspath;
+
+  if (!isset($jspath)) {
+    // first check in the libraries location
+    $jspath_file_path = 'sites/all/libraries/jsMath/jsMath-easy-load.js';
+    if (!file_exists($jspath_file_path)) {
+      // if it's not there, try inside the module
+      $jspath_file_path = drupal_get_path('module', 'jsmath') . '/jsMath/jsMath-easy-load.js';
+      if (!file_exists($jspath_file_path)) {
+        $jspath = FALSE;
+        return FALSE;
+      }
+    }
+    $jspath = dirname($jspath_file_path);
+  }
+
+  return $jspath;
+}
+
+/**
+ * Writes javascript into the page header for loading jsMath
+ */
+function _jsmath_insert() {
+  static $inserted = FALSE;
+
+  // we want to insert it once only
+  if ($inserted) {
+    return;
+  }
+  $inserted = TRUE;
+
+  // Create javascript for setting jsMath options and loading jsMath
+
+  $jspath = _jsmath_library_path();
+  if ($jspath === FALSE) {
+    // otherwise log an error
+    drupal_set_message(t("Installation of jsMath library missing"), 'error');
+    watchdog('jsmath',
+      'Unable to find the jsMath library. Please, read INSTALL.txt for more information.',
+      array(),
+      WATCHDOG_ERROR);
+    return;
+  }
+
+  $jsmath_path = base_path() . $jspath;
+  $load = "<script type=\"text/javascript\">
+    if(!window.jsMath){window.jsMath={}}
+    jsMath.Easy={
+      root:\"{$jsmath_path}\",
+      scale:". variable_get('jsmath_scale', 120) .",
+      autoload:". variable_get('jsmath_autoload', 1) .",
+      processSlashParens:". variable_get('jsmath_processSlashParens', 1) .",
+      processSlashBrackets:". variable_get('jsmath_processSlashBrackets', 1) .",
+      processLaTeXenvironments:". variable_get('jsmath_processLaTeXenvironments', 1) .",
+      processDoubleDollars:". variable_get('jsmath_processDoubleDollars', 1) .",
+      processSingleDollars:". variable_get('jsmath_processSingleDollars', 1) .",
+      fixEscapedDollars:". variable_get('jsmath_processSingleDollars', 1) .",
+      doubleDollarsAreInLine:". variable_get('jsmath_doubleDollarsAreInLine', 0) .",
+      allowDisableTag:0,
+      customDelimiters:[". _jsmath_delims() ."],
+      allowDoubleClicks:". variable_get('jsmath_allowDoubleClicks', 1) .",
+      showFontWarnings:". variable_get('jsmath_showFontWarnings', 1) .",
+      method:\"". variable_get('jsmath_method', 'Process') ."\",
+      loadFiles:[". variable_get('jsmath_loadFiles', '"extensions/AMSmath.js", "extensions/AMSsymbols.js"') ."],
+      loadFonts:[". variable_get('jsmath_loadFonts', '') ."],
+      allowGlobal:". variable_get('jsmath_allowGlobal', 1) .",
+      noImageFonts:0};</script>
+    <script type=\"text/javascript\" src=\"{$jsmath_path}/jsMath-easy-load.js\"></script>";
+
+  // Write this javascript into the page header
+  drupal_set_html_head($load);
+}
+
+/**
+ * Implementation of hook_help()
+ *
+ * Describe the filter
+ */
+function jsmath_help($section) {
+  switch ($section) {
+  case 'admin/modules#description':
+    // This description is shown in the listing at admin/modules.
+    return t('Remove unless paragraph often added by WYSIWIG editors.');
+
+  }
+}
+
+/**
+ * Implementation of hook_filter_tips()
+ *
+ * Describe the fitler
+ */
+function jsmath_filter_tips($delta, $format, $long = FALSE) {
+  switch ($delta) {
+  case 0:
+    if ($long) {
+      return t('This filter parses the [math]...[/math] and other TeX tags in your nodes.');
+    }
+    else {
+      return t('Parse [math]...[/math] and other TeX tags.');
+    }
+    break;
+
+  }
+}
+
+/**
+ * Implementation of hook_filter().
+ *
+ * The filter itself.
+ */
+function jsmath_filter($op, $delta = 0, $format = -1, $text = '') {
+  // The "list" operation provides the module an opportunity to declare both how
+  // many filters it defines and a human-readable name for each filter. Note that
+  // the returned name should be passed through t() for translation.
+  if ($op == 'list') {
+    return array(
+      0 => t('Replace jsMath tags with nicely formatted formulae'),
+    );
+  }
+
+  $delims = _jsmath_delims(TRUE);
+
+  // All operations besides "list" provide a $delta argument so we know which
+  // filter they refer to.
+  switch ($op) {
+  // This description is shown in the administrative interface, unlike the
+  // filter tips which are shown in the content editing interface.
+  case 'description':
+    // should we have a separate description for each filter here?!
+    return t('This replaces the '. $delims .' tags with nicely formatted formulae.');
+
+  // We don't need the "prepare" operation for this filter, but it's required
+  // to at least return the input text as-is.
+  case 'prepare':
+    return $text;
+
+  // Unfortunate, but if the page gets cached then we miss the _jsmath_insert()
+  // call of the process below; so we could help some by having our own cache
+  // feature implemented... I'm not too sure how else we could resolve this one.
+  case 'no cache':
+    return TRUE;
+
+  // The actual filtering is performed here. The supplied text should be
+  // returned, once any necessary substitutions have taken place.
+  case 'process':
+    // TODO: jsMath will add <div> tags inside your <p> tags (if you
+    //       are using a WISYWIG.) We should look into removing the
+    //       <p> tags here.
+    $d = explode(",", $delims);
+    foreach ($d as $n) {
+      $m[] = preg_quote($n, '%');
+    }
+    if (variable_get('jsmath_processSlashParens', 1)) {
+      $m[] = '\\\\\(';
+    }
+    if (variable_get('jsmath_processSlashBrakets', 1)) {
+      $m[] = '\\\\\[';
+    }
+    if (variable_get('jsmath_processLaTeXenvironments', 1)) {
+      $m[] = '\\\\begin';
+    }
+    if (variable_get('jsmath_processDoubleDollars', 1)) {
+      $m[] = '\$\$';
+    }
+    if (variable_get('jsmath_processSingleDollars', 1)) {
+      $m[] = '[^$\\]\$[^$]';
+    }
+    if (preg_match('%' . implode('|', $m) . '%', $text)) {
+      // we need jsmath when we match one or more jsMath delimiter
+      _jsmath_insert();
+    }
+    return $text;
+
+  }
+}
+
+// vim: ts=2 sw=2 et syntax=php

@@ -1,5 +1,5 @@
 <?php
-// $Id: text_captcha.inc,v 1.2 2007/08/21 22:54:03 soxofaan Exp $
+// $Id: text_captcha.inc,v 1.3 2007/12/22 15:55:12 soxofaan Exp $
 
 /**
  * Helper function for splitting a string on white spaces.
@@ -9,7 +9,6 @@
 function _text_captcha_whitespace_explode($string) {
   return preg_split('/\s+/', $string, -1, PREG_SPLIT_NO_EMPTY);
 }
-
 
 /**
  * Helper function for splitting an utf8 string correctly in characters.
@@ -53,8 +52,8 @@ function _text_captcha_utf8_split($str) {
 function _text_captcha_word_pool_get_content($name_base, $lang_code, $default_value, $explode=FALSE) {
   if (module_exists('locale')) {
     if (!$lang_code) {
-      global $locale;
-      $lang_code = $locale;
+      global $language;
+      $lang_code = $language->language;
     }
     $content = variable_get("{$name_base}_{$lang_code}", t($default_value));
   }
@@ -74,15 +73,14 @@ function _text_captcha_word_pool_get_content($name_base, $lang_code, $default_va
 function _text_captcha_word_pool_form_items(&$form, $name_base, $title, $description, $default_value, $rows=3) {
   if (module_exists('locale')) {
     // Locale available
-    global $locale;
-    $languages = locale_supported_languages();
+    $langs = locale_language_list();
     $form[$name_base] = array(
       '#type' => 'fieldset',
       '#title' => t($title),
       '#description' => t($description),
       '#collapsible' => TRUE,
     );
-    foreach ($languages['name'] as $lang_code => $lang_name) {
+    foreach ($langs as $lang_code => $lang_name) {
       $form[$name_base]["{$name_base}_{$lang_code}"] = array(
         '#type' => 'textarea',
         '#title' => t('For language %lang_name (code %lang_code)', array('%lang_name'=>$lang_name, '%lang_code'=>$lang_code)),
@@ -122,9 +120,8 @@ function _text_captcha_word_pool_validate_word_length($name, $words, $minimum_le
  */
 function _text_captcha_word_pool_validate($name_base, $form_values, $minimum_count, $minimum_length=NULL, $too_short_message='') {
   if (module_exists('locale')) {
-    global $locale;
-    $languages = locale_supported_languages();
-    foreach ($languages['name'] as $lang_code => $lang_name) {
+    $langs = locale_language_list();
+    foreach ($langs as $lang_code => $lang_name) {
       $words = _text_captcha_whitespace_explode($form_values["{$name_base}_{$lang_code}"]);
       if (count($words) < $minimum_count) {
         form_set_error("{$name_base}_{$lang_code}", t('You should provide at least @num words', array('@num' => $minimum_count)));

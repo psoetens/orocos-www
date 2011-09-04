@@ -14,10 +14,4 @@ class ListhandlerTest extends DrupalTestCase {
 
   function testSendAPostAsAnEmail() {
   }
-
-  /**
-   * Ensures that changes made on the admin page stick
-   */
-  function testSetUnsetSettings() {
-  }
 }

@@ -1,79 +1,123 @@
 <?php
-//$Id: mailman_manager.install,v 1.11.2.1 2008/02/21 21:20:12 samuelet Exp $
+// $Id: mailman_manager.install,v 1.12.2.1 2008/12/27 17:45:57 samuelet Exp $
 
+/**
+ * @file
+ * Mailman Manager install/schema hooks.
+ */
+
+/**
+ * Implementation of hook_install().
+ */
 function mailman_manager_install() {
-  switch ($GLOBALS['db_type']) {
-    case 'mysql':
-    case 'mysqli':
-        db_query("CREATE TABLE {mailman_lists} (
-                lid tinyint(3) unsigned NOT NULL auto_increment,
-                name varchar(48) NOT NULL default '',
-                command varchar(72) NOT NULL default '',
-                admin varchar(48) default '',
-                web varchar(255) default '',
-                webarch varchar(255) default '',
-                PRIMARY KEY  (lid)
-        )");
-
-        db_query("CREATE TABLE {mailman_users} (
-                uid int(10) NOT NULL default '0',
-                lid int(10) NOT NULL default '0',
-                lstatus int(10) NOT NULL default '0',
-                lmail varchar(36) NOT NULL default '',
-                lpass varchar(36) NOT NULL default '',
-                PRIMARY KEY  (uid,lid)
-        )");
-    break;
- 
-    case 'pgsql':
-        db_query("CREATE TABLE {mailman_lists} (
-                lid SERIAL NOT NULL,
-                name text NOT NULL default '',
-                command text NOT NULL default '',
-                admin text default '',
-                web text default '',
-                webarch text default '',
-                PRIMARY KEY  (lid)
-        )");
-
-        db_query("CREATE TABLE {mailman_users} (
-                uid integer NOT NULL default 0,
-                lid integer NOT NULL default 0,
-                lstatus integer NOT NULL default 0,
-                lmail text NOT NULL default '',
-                lpass text NOT NULL default '',
-                PRIMARY KEY  (uid, lid) 
-                )");
-  }
+  // Create tables.
+  drupal_install_schema('mailman_manager');
 }
 
-// Add the webaddress and web archive url to the mailman_lists
-function mailman_manager_update_1() { 
-    $ret = array(); 
- 
-    switch ($GLOBALS['db_type']) { 
-    case 'pgsql': 
+/**
+ * Implementation of hook_uninstall().
+ */
+function mailman_manager_uninstall() {
+  // Remove tables.
+  drupal_uninstall_schema('mailman_manager');
+}
 
-        // Add web links:
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN web TEXT");
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN web SET DEFAULT ''"); 
+/**
+ * Implementation of hook_schema().
+ */
+function mailman_manager_schema() {
+  $schema['mailman_lists'] = array(
+    'description' => t('Stores specific information for mailiman lists.'),
+    'fields' => array(
+      'lid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => t('The list id.'),
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 48,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => t('Mailing List name'),
+      ),
+      'command' => array(
+        'type' => 'varchar',
+        'length' => 72,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => t("Mailing List 'request' address"),
+      ),
+      'admin' => array(
+        'type' => 'varchar',
+        'length' => 48,
+        'default' => '',
+        'description' => t("Mailing List 'admin' address"),
+      ),
+      'web' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'description' => t('Mailing list web address for users.'),
+      ),
+      'webarch' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+        'description' => t('Mailing list web archive address for users'),
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
 
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN webarch text"); 
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ALTER COLUMN webarch SET DEFAULT ''"); 
+  $schema['mailman_users'] = array(
+    'description' => t('Stores subscription information for users.'),
+    'fields' => array(
+      'uid' => array(
+        'type' => 'int',
+        'disp-width' => 10,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => t('User id.'),
+      ),
+      'lid' => array(
+        'type' => 'int',
+        'disp-width' => 10,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => t('The list id.'),
+      ),
+      'lstatus' => array(
+        'type' => 'int',
+        'disp-width' => 10,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => t('Subscription status.'),
+      ),
+      'lmail' => array(
+        'type' => 'varchar',
+        'length' => 36,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => t('Current user subscribed email.'),
+      ),
+      'lpass' => array(
+        'type' => 'varchar',
+        'length' => 36,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => t('Current user list password.'),
+      ),
+    ),
+    'primary key' => array('uid', 'lid'),
+  );
 
-        // Admin is text, not varchar, so it doesn't need patching
+  return $schema;
+}
 
-        break; 
- 
-    case 'mysql': 
-    case 'mysqli': 
-        // Add web links:
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN web varchar(255) DEFAULT ''"); 
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} ADD COLUMN webarch varchar(255) DEFAULT ''"); 
-        // Admin is optional:
-        $ret[] = update_sql("ALTER TABLE {mailman_lists} CHANGE admin admin VARCHAR( 48 ) DEFAULT ''"); 
-        break; 
-    } 
- 
-    return $ret; 
+function mailman_manager_update_6001() {
+  // Rebuild menu cache
+  module_rebuild_cache();
+  return array();
 }
