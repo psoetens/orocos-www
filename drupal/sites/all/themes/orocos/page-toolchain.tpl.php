@@ -1,5 +1,5 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="<?php print $language ?>" xml:lang="<?php print $language ?>">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="<?php print $language->language ?>" xml:lang="<?php print $language->language ?>">
 
 <head>
   <?php print $head ?>
@@ -13,10 +13,13 @@
 
 <table border="0" cellpadding="0" cellspacing="0" id="header">
   <tr>
+    <?php if ($left) { ?><td id="sidebar-left">
+      <?php print $left ?>
+    </td><?php } ?>
     <td id="logo">
-      <?php if ($logo) { ?><a href="<?php print $base_path ?>" title="<?php print t('Home') ?>"><img src="<?php print $logo ?>" alt="<?php print t('Home') ?>" /></a><?php } ?>
+      <?php if ($logo) { ?><a href="<?php print $front_page ?>" title="<?php print t('Home') ?>"><img src="<?php print $logo ?>" alt="<?php print t('Home') ?>" /></a><?php } ?>
       <?php if (preg_match("/toolchain/i", drupal_get_path_alias($_GET['q'])) ) { ?>
-          <h1 class='site-name'><a href="<?php print $base_path ?><?php print "toolchain" ?>" title="<?php print t('Orocos Toolchain Home') ?>">Orocos Toolchain</a></h1>
+          <h1 class='site-name'><a href="<?php print $front_page ?><?php print "toolchain" ?>" title="<?php print t('Orocos Toolchain Home') ?>">Orocos Toolchain</a></h1>
           <div class='site-slogan'><?php print "Design, Generate, Deploy" ?></div> 
       <?php }?>
     <?php print $breadcrumb ?>
@@ -36,9 +39,6 @@
 
 <table border="0" cellpadding="0" cellspacing="0" id="content">
   <tr>
-    <?php if ($sidebar_left) { ?><td id="sidebar-left">
-      <?php print $sidebar_left ?>
-    </td><?php } ?>
     <td valign="top">
 
         <?php print $messages ?>
@@ -56,14 +56,14 @@
         <?php print $content; ?>
       </div>
     </td>
-    <?php if ($sidebar_right) { ?><td id="sidebar-right">
-      <?php print $sidebar_right ?>
+    <?php if ($right) { ?><td id="sidebar-right">
+      <?php print $right ?>
     </td><?php } ?>
   </tr>
 </table>
 
 <div id="footer">
-  <?php print $footer_message ?>
+  <?php print $footer ?>
 </div>
 <?php print $closure ?>
 </body>
