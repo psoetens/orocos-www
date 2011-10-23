@@ -4,7 +4,7 @@
  * ----------
  * Author: Milian Wolff (mail@milianw.de)
  * Copyright: (c) 2008 Milian Wolff (http://milianw.de)
- * Release Version: 1.0.8
+ * Release Version: 1.0.8.10
  * Date Started: 2008/06/17
  *
  * Apt sources.list language file for GeSHi.
@@ -51,10 +51,11 @@ $language_data = array (
             'stable', 'old-stable', 'testing', 'testing-proposed-updates',
             'unstable', 'unstable-proposed-updates', 'experimental',
             'non-US', 'security', 'volatile', 'volatile-sloppy',
-            'main', 'restricted', 'preview', 'apt-build',
+            'apt-build',
+            'stable/updates',
             //Debian
             'buzz', 'rex', 'bo', 'hamm', 'slink', 'potato', 'woody', 'sarge',
-            'etch', 'lenny', 'sid',
+            'etch', 'lenny', 'wheezy', 'sid',
             //Ubuntu
             'warty', 'warty-updates', 'warty-security', 'warty-proposed', 'warty-backports',
             'hoary', 'hoary-updates', 'hoary-security', 'hoary-proposed', 'hoary-backports',
@@ -65,8 +66,15 @@ $language_data = array (
             'gutsy', 'gutsy-updates', 'gutsy-security', 'gutsy-proposed', 'gutsy-backports',
             'hardy', 'hardy-updates', 'hardy-security', 'hardy-proposed', 'hardy-backports',
             'intrepid', 'intrepid-updates', 'intrepid-security', 'intrepid-proposed', 'intrepid-backports',
-            'commercial', 'universe', 'multiverse'
+            'jaunty', 'jaunty-updates', 'jaunty-security', 'jaunty-proposed', 'jaunty-backports',
+            'karmic', 'karmic-updates', 'karmic-security', 'karmic-proposed', 'karmic-backports',
+            'lucid', 'lucid-updates', 'lucid-security', 'lucid-proposed', 'lucid-backports',
+            'maverick', 'maverick-updates', 'maverick-security', 'maverick-proposed', 'maverick-backports'
             ),
+        3 => array(
+            'main', 'restricted', 'preview', 'contrib', 'non-free',
+            'commercial', 'universe', 'multiverse'
+            )
     ),
     'REGEXPS' => array(
         0 => "(((http|ftp):\/\/|file:\/)[^\s]+)|(cdrom:\[[^\]]*\][^\s]*)",
@@ -76,12 +84,14 @@ $language_data = array (
     'CASE_SENSITIVE' => array(
         GESHI_COMMENTS => false,
         1 => false,
-        2 => false
+        2 => true,
+        3 => true
         ),
     'STYLES' => array(
         'KEYWORDS' => array(
             1 => 'color: #00007f;',
-            2 => 'color: #b1b100;'
+            2 => 'color: #b1b100;',
+            3 => 'color: #b16000;'
             ),
         'COMMENTS' => array(
             1 => 'color: #adadad; font-style: italic;',
@@ -106,7 +116,8 @@ $language_data = array (
         ),
     'URLS' => array(
         1 => '',
-        2 => ''
+        2 => '',
+        3 => ''
         ),
     'OOLANG' => false,
     'OBJECT_SPLITTERS' => array(
