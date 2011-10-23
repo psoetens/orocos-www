@@ -1,0 +1,41 @@
+/* Larger titles */
+
+h2 {
+    font-size: 1.5em;
+}
+
+h3, h4, h5, h6 {
+    font-size: 1.2em;
+}
+
+
+/* section numbering */
+
+#main {
+    counter-reset: chapter;      /* Create a chapter counter scope */
+}
+
+#main h1 {
+    counter-reset: chapter;
+}
+#main h2:before {
+    content: counter(chapter) ". ";
+    counter-increment: chapter;  /* Add 1 to chapter */
+}
+h2:autosummary:before {
+    content: ;
+}
+#main h2 {
+    counter-reset: section;
+}
+#main h3 {
+    counter-reset: subsection;
+}
+#main h3:before {
+    content: counter(chapter) "." counter(section) " ";
+    counter-increment: section;
+}
+#main h4:before {
+    content: counter(chapter) "." counter(section) "." counter(subsection) " ";
+    counter-increment: subsection;
+}

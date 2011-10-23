@@ -1,0 +1,10 @@
+name = Orocos
+description = The Orocos theme.
+core = 6.x
+engine = phptemplate
+
+regions[left] = left sidebar
+regions[right] = right sidebar
+regions[content] = content
+regions[header] = header
+regions[footer] = footer
